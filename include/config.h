@@ -1,3 +1,5 @@
+#pragma once
+
 #define PIN_MOSI 11
 #define PIN_CLK 16
 #define PIN_MISO 12

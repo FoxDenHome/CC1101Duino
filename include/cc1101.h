@@ -7,10 +7,11 @@
 
 class CC1101Transceiver {
 public:
-  CC1101Transceiver(byte SCK, byte MISO, byte MOSI, byte CSN, byte GDO0, byte GDO2);
+  CC1101Transceiver(byte SCK, byte MISO, byte MOSI, byte CSN, byte GDO0,
+                    byte GDO2);
   void setup();
   void beginTransmission();
-  void endTransmission(); 
+  void endTransmission();
   byte getTXPin();
   void select();
 

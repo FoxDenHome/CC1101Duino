@@ -6,10 +6,10 @@
 
 class HostSerial : public CommandSerial {
 public:
-    HostSerial(HardwareSerial& _serial);
+  HostSerial(HardwareSerial &_serial);
 
 protected:
-    void handle() override;
+  void handle() override;
 };
 
 extern HostSerial hostSerial;
