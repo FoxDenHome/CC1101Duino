@@ -31,6 +31,9 @@ void CC1101Transceiver::setup() {
   CC1101_MAIN.setCCMode(false);
   CC1101_MAIN.setPktFormat(3);       // Format of RX and TX data. 0 = Normal mode, use FIFOs for RX and TX. 1 = Synchronous serial mode, Data in on GDO0 and data out on either of the GDOx pins. 2 = Random TX mode; sends random data using PN9 generator. Used for test. Works as normal mode, setting 0 (00), in RX. 3 = Asynchronous serial mode, Data in on GDO0 and data out on either of the GDOx pins.
   CC1101_MAIN.setSyncMode(0);
+  CC1101_MAIN.SpiWriteReg(CC1101_IOCFG0, 0x2E);
+  CC1101_MAIN.SpiWriteReg(CC1101_IOCFG1, 0x2E);
+  CC1101_MAIN.SpiWriteReg(CC1101_IOCFG2, 0x0D);
   CC1101_MAIN.SetRx();
 }
 
