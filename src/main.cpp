@@ -13,7 +13,7 @@ void setup() {
   hostSerial.init();
   cc1101.setup();
 
-  hostSerial.echoFirst(F("CC1101-duino ready "));
+  hostSerial.echoFirst(F("CC1101Duino ready "));
   hostSerial.sendEnd(String(mcusr_mirror));
   wdt_enable(WDTO_2S);
 }
