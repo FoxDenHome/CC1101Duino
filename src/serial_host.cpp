@@ -75,36 +75,47 @@ void transmitDataEasy(const String &buffer) {
 }
 
 void HostSerial::handle() {
-  int tmpi;
-  float tmpf;
   this->buffer.toUpperCase();
 
   cc1101.select();
 
   switch (this->command) {
-  case 'M': // modulation
-    tmpi = this->buffer.toInt();
-    CC1101_MAIN.setModulation(tmpi);
-    break;
-  case 'F': // frequency (MHz)
-    tmpf = this->buffer.toFloat();
-    CC1101_MAIN.setMHZ(tmpf);
-    break;
-  case 'T': // repeat delay (time, us)
-    repeat_delay = this->buffer.toInt();
-    break;
-  case 'R': // repeats
-    repeats = this->buffer.toInt();
-    break;
-  case 'E': // "Easy" data
-    transmitDataEasy(this->buffer);
-    break;
-  case 'D': // data
-    transmitData(this->buffer);
-    break;
-  default:
-    this->reply(F("BAD Unknown command"));
-    return;
+    case 'M': { // modulation
+      int mod = this->buffer.toInt();
+      CC1101_MAIN.setModulation(mod);
+      break;
+    }
+    case 'F': { // frequency (MHz)
+      float mhz = this->buffer.toFloat();
+      if (mhz > 0) {
+        CC1101_MAIN.setMHZ(mhz);
+      }
+      break;
+    }
+    case 'T': { // repeat delay (time, us)
+      repeat_delay = this->buffer.toInt();
+      break;
+    }
+    case 'R': { // repeats
+      repeats = this->buffer.toInt();
+      break;
+    }
+    case 'E': { // "Easy" data
+      transmitDataEasy(this->buffer);
+      break;
+    }
+    case 'D': { // data
+      transmitData(this->buffer);
+      break;
+    }
+    case '$':
+    case '>': {
+      break;
+    }
+    default: {
+      this->reply(F("BAD Unknown command"));
+      return;
+    }
   }
 
   this->reply(F("OK Done"));
