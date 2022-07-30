@@ -38,7 +38,6 @@ void CC1101Transceiver::setup() {
           // RX. 3 = Asynchronous serial mode, Data in on GDO0 and data out on
           // either of the GDOx pins.
   CC1101_MAIN.setSyncMode(0);
-  CC1101_MAIN.SpiWriteReg(CC1101_BSCFG,  0x03); // Most lenient
   CC1101_MAIN.SpiWriteReg(CC1101_IOCFG0, 0x2E);
   CC1101_MAIN.SpiWriteReg(CC1101_IOCFG1, 0x2E);
   CC1101_MAIN.SpiWriteReg(CC1101_IOCFG2, 0x0D);
