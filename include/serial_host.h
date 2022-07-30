@@ -1,11 +1,12 @@
 #pragma once
 
 #include <Arduino.h>
-#include "LacrosseReceiver.h"
+#include "signalDecoder.h"
 
 #include "serial.h"
 
-void beginReceive();
+void loopRxTiming();
+void initRxSystem();
 
 class HostSerial : public CommandSerial {
 public:
@@ -16,4 +17,4 @@ protected:
 };
 
 extern HostSerial hostSerial;
-extern LacrosseReceiver thermoReceiver;
+extern SignalDetectorClass signalDecoder;

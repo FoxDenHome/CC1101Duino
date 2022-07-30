@@ -1,13 +1,18 @@
 #include <Arduino.h>
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
-#include "LacrosseReceiver.h"
+#include "signalDecoder.h"
+#include "SimpleFIFO.h"
 
 #include "cc1101.h"
 #include "config.h"
 #include "serial_host.h"
 #include "utils.h"
 
-LacrosseReceiver thermoReceiver(PIN_GDO2);
+#define FIFO_LENGTH 90    // 150
+#define minPulse    90
+
+SignalDetectorClass signalDecoder;
+SimpleFIFO<int,FIFO_LENGTH> fifo; //store FIFO_LENGTH # ints
 
 HostSerial hostSerial(Serial);
 
@@ -22,8 +27,61 @@ static int tx_mod = 0;
 const float rx_freq = 433.88;
 const int rx_mod = 2;
 
+static uint8_t rssiCallback() {
+  cc1101.select();
+  return CC1101_MAIN.getRssi();
+}
+
+// handleInterrupt and loopRxtiming come from SIGNALDuino
+unsigned long lastRxTime;
+void handleInterrupt() {
+  cli();
+  const unsigned long curTime = micros();
+  const unsigned long duration = curTime - lastRxTime;
+  lastRxTime = curTime;
+  if (duration >= minPulse) {//kleinste zulaessige Pulslaenge
+    int sDuration;
+    if (duration < maxPulse) {//groesste zulaessige Pulslaenge, max = 32000
+      sDuration = int(duration); //das wirft bereits hier unnoetige Nullen raus und vergroessert den Wertebereich
+    }
+    else {
+      sDuration = maxPulse; // Maximalwert set to maxPulse defined in lib.
+    }
+    if (digitalRead(PIN_GDO2) == HIGH) { // Wenn jetzt high ist, dann muss vorher low gewesen sein, und dafuer gilt die gemessene Dauer.
+      sDuration = -sDuration;
+    }
+    fifo.enqueue(sDuration);
+  } // else => trash
+  sei();
+}
+
+void loopRxTiming() {
+  cli();
+  const unsigned long  duration = micros() - lastRxTime;
+
+  if (duration >= maxPulse) { //Auf Maximalwert pruefen.
+    int sDuration = maxPulse;
+    if (digitalRead(PIN_GDO2) == LOW) { // Wenn jetzt low ist, ist auch weiterhin low
+      sDuration = -sDuration;
+    }
+    fifo.enqueue(sDuration);
+    lastRxTime = micros();
+  }
+  sei();
+
+  int val;
+  while (fifo.count() > 0) {               // Puffer auslesen und an Dekoder uebergeben
+    val = fifo.dequeue();
+    signalDecoder.decode(&val);
+  }
+}
+
 static void beginTransmission() {
-  thermoReceiver.disableReceive();
+  cli();
+  detachInterrupt(digitalPinToInterrupt(PIN_GDO2));
+  signalDecoder.reset();
+  fifo.flush();
+  sei();
 
   CC1101_MAIN.setMHZ(tx_freq);
   CC1101_MAIN.setModulation(tx_mod);
@@ -36,10 +94,42 @@ static void endTransmission() {
   CC1101_MAIN.setModulation(rx_mod);
   cc1101.endTransmission();
 
-  thermoReceiver.enableReceive();
+  cli();
+  signalDecoder.reset();
+  fifo.flush();
+  attachInterrupt(digitalPinToInterrupt(PIN_GDO2), handleInterrupt, CHANGE);
+  sei();
 }
 
-void beginReceive() {
+size_t writeCallback(const uint8_t *buf, uint8_t len) {
+  while (!Serial.availableForWrite()) {
+    yield();
+  }
+
+  if (len == 1) {
+    switch (buf[0]) {
+      case '\r':
+      case '\n':
+        return;
+      case MSG_START:
+        hostSerial.sendFirst("T");
+        return 1;
+      case MSG_END:
+        hostSerial.sendEnd();
+        return 1;
+    }
+  }
+
+  return Serial.write(buf,len);  
+}
+
+void initRxSystem() {
+  signalDecoder.setRSSICallback(rssiCallback);
+  signalDecoder.setStreamCallback(writeCallback);
+  signalDecoder.MredEnabled = false;
+  signalDecoder.MCenabled = true;
+  signalDecoder.MSenabled = true;
+  signalDecoder.MUenabled = true;
   endTransmission();
 }
 

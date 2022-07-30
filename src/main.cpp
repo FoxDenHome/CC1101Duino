@@ -12,13 +12,15 @@ void setup() {
 
   hostSerial.init();
   cc1101.setup();
-  beginReceive();
+
+  initRxSystem();
 
   hostSerial.echoFirst(F("CC1101Duino ready "));
   hostSerial.sendEnd(String(mcusr_mirror));
   wdt_enable(WDTO_2S);
 }
 
+/*
 static bool sendMeasure() {
   measure m = thermoReceiver.getNextMeasure();
 
@@ -44,17 +46,20 @@ static bool sendMeasure() {
 
   return true;
 }
+*/
 
 void loop() {
   wdt_reset();
 
   hostSerial.loop();
 
+  loopRxTiming();
+
   static unsigned long lastMeasurePoll = 0;
   unsigned long currMs = millis();
 
   if (currMs - lastMeasurePoll >= 100) {
     lastMeasurePoll = currMs;
-    sendMeasure();
+    //sendMeasure();
   }
 }

@@ -1,0 +1,6 @@
+The code from the following libraries is from https://github.com/RFD-FHEM/SIGNALDuino licensed under the GNU GPL 3.0:
+- bitstore
+- fastdelegate
+- output
+- signalDecoder
+- SimpleFIFO
