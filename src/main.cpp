@@ -27,7 +27,7 @@ static bool sendMeasure() {
       hostSerial.sendFirst("S|T|C|");
       break;
     case HUMIDITY:
-      hostSerial.sendFirst("S|H|%rh|");
+      hostSerial.sendFirst("S|H|%|");
       break;
     case UNKNOWN:
       return false;
