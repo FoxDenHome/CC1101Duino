@@ -41,6 +41,7 @@ void CC1101Transceiver::setup() {
   CC1101_MAIN.SpiWriteReg(CC1101_IOCFG0, 0x2E);
   CC1101_MAIN.SpiWriteReg(CC1101_IOCFG1, 0x2E);
   CC1101_MAIN.SpiWriteReg(CC1101_IOCFG2, 0x0D);
+  CC1101_MAIN.setPA(100);
   CC1101_MAIN.SetRx();
 }
 

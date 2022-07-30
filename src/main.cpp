@@ -24,22 +24,22 @@ static bool sendMeasure() {
 
   switch (m.type) {
     case TEMPERATURE:
-      hostSerial.sendFirst("S|T|C|");
+      hostSerial.sendFirst(F("ST|C|"));
       break;
     case HUMIDITY:
-      hostSerial.sendFirst("S|H|%|");
+      hostSerial.sendFirst(F("SH|%|"));
       break;
     case UNKNOWN:
       return false;
   }
 
   hostSerial.sendNext(String(m.sensorAddr));
-  hostSerial.sendNext("|");
+  hostSerial.sendNext(F("|"));
   if (m.sign < 0) {
-    hostSerial.sendNext("-");
+    hostSerial.sendNext(F("-"));
   }
   hostSerial.sendNext(String(m.units));
-  hostSerial.sendNext(".");
+  hostSerial.sendNext(F("."));
   hostSerial.sendEnd(String(m.decimals));
 
   return true;

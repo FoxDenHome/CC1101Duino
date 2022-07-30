@@ -19,23 +19,21 @@ static int repeat_delay = 10;
 static float tx_freq = 0;
 static int tx_mod = 0;
 
-static float rx_freq = 433.88;
-static int rx_mod = 2;
+const float rx_freq = 433.88;
+const int rx_mod = 2;
 
 static void beginTransmission() {
   thermoReceiver.disableReceive();
 
-  CC1101_MAIN.setModulation(tx_mod);
   CC1101_MAIN.setMHZ(tx_freq);
-  CC1101_MAIN.setPA(100);
+  CC1101_MAIN.setModulation(tx_mod);
   cc1101.beginTransmission();
 }
 
 static void endTransmission() {
   cc1101.endTransmission();
-  CC1101_MAIN.setModulation(rx_mod);
   CC1101_MAIN.setMHZ(rx_freq);
-  CC1101_MAIN.setPA(100);
+  CC1101_MAIN.setModulation(rx_mod);
   cc1101.endTransmission();
 
   thermoReceiver.enableReceive();
@@ -45,7 +43,7 @@ void beginReceive() {
   endTransmission();
 }
 
-void _transmitData(const int txLen, const uint16_t *txDelays,
+static void _transmitData(const int txLen, const uint16_t *txDelays,
                    const byte *txData) {
   for (int i = 0; i < txLen; i++) {
     PIN_GDO0_PORT = txData[i];
@@ -53,7 +51,7 @@ void _transmitData(const int txLen, const uint16_t *txDelays,
   }
 }
 
-void _transmitDataEasy(const int txLen, const unsigned long txDelay,
+static void _transmitDataEasy(const int txLen, const unsigned long txDelay,
                        const byte *txData) {
   for (int i = 0; i < txLen; i++) {
     PIN_GDO0_PORT = txData[i];
@@ -61,7 +59,7 @@ void _transmitDataEasy(const int txLen, const unsigned long txDelay,
   }
 }
 
-void transmitData(const String &buffer) {
+static void transmitData(const String &buffer) {
   const int txLen = buffer.length() / 5;
   uint16_t *txDelays = new uint16_t[txLen];
   byte *txData = new byte[txLen];
@@ -85,7 +83,7 @@ void transmitData(const String &buffer) {
   delete[] txData;
 }
 
-void transmitDataEasy(const String &buffer) {
+static void transmitDataEasy(const String &buffer) {
   const int txLen = buffer.length() - 4;
   const uint16_t txDelay = hexInputToShort(0, buffer);
   byte *txData = new byte[txLen];
