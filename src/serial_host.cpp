@@ -1,9 +1,13 @@
 #include <Arduino.h>
+#include <ELECHOUSE_CC1101_SRC_DRV.h>
+#include "LacrosseReceiver.h"
 
 #include "cc1101.h"
 #include "config.h"
 #include "serial_host.h"
 #include "utils.h"
+
+LacrosseReceiver thermoReceiver(PIN_GDO2);
 
 HostSerial hostSerial(Serial);
 
@@ -11,6 +15,35 @@ HostSerial::HostSerial(HardwareSerial &serial) : CommandSerial(serial) {}
 
 static int repeats = 20;
 static int repeat_delay = 10;
+
+static float tx_freq = 0;
+static int tx_mod = 0;
+
+static float rx_freq = 433.88;
+static int rx_mod = 2;
+
+static void beginTransmission() {
+  thermoReceiver.disableReceive();
+
+  CC1101_MAIN.setModulation(tx_mod);
+  CC1101_MAIN.setMHZ(tx_freq);
+  CC1101_MAIN.setPA(100);
+  cc1101.beginTransmission();
+}
+
+static void endTransmission() {
+  cc1101.endTransmission();
+  CC1101_MAIN.setModulation(rx_mod);
+  CC1101_MAIN.setMHZ(rx_freq);
+  CC1101_MAIN.setPA(100);
+  cc1101.endTransmission();
+
+  thermoReceiver.enableReceive();
+}
+
+void beginReceive() {
+  endTransmission();
+}
 
 void _transmitData(const int txLen, const uint16_t *txDelays,
                    const byte *txData) {
@@ -40,13 +73,13 @@ void transmitData(const String &buffer) {
     txDelays[i] = hexInputToShort((i * 5) + 1, buffer);
   }
 
-  cc1101.beginTransmission();
+  beginTransmission();
   for (int i = 0; i < repeats; i++) {
     _transmitData(txLen, txDelays, txData);
     PIN_GDO0_PORT = dataOff;
     delayMicroseconds(repeat_delay);
   }
-  cc1101.endTransmission();
+  endTransmission();
 
   delete[] txDelays;
   delete[] txData;
@@ -63,13 +96,13 @@ void transmitDataEasy(const String &buffer) {
     txData[i] = (buffer[i + 4] == '1') ? dataOn : dataOff;
   }
 
-  cc1101.beginTransmission();
+  beginTransmission();
   for (int i = 0; i < repeats; i++) {
     _transmitDataEasy(txLen, txDelay, txData);
     PIN_GDO0_PORT = dataOff;
     delayMicroseconds(repeat_delay);
   }
-  cc1101.endTransmission();
+  endTransmission();
 
   delete[] txData;
 }
@@ -82,13 +115,13 @@ void HostSerial::handle() {
   switch (this->command) {
     case 'M': { // modulation
       int mod = this->buffer.toInt();
-      CC1101_MAIN.setModulation(mod);
+      tx_mod = mod;
       break;
     }
     case 'F': { // frequency (MHz)
       float mhz = this->buffer.toFloat();
       if (mhz > 0) {
-        CC1101_MAIN.setMHZ(mhz);
+        tx_freq = mhz;
       }
       break;
     }

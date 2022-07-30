@@ -13,6 +13,7 @@ public:
   void beginTransmission();
   void endTransmission();
   byte getTXPin();
+  byte getRXPin();
   void select();
 
 protected:
