@@ -112,7 +112,7 @@ size_t writeCallback(const uint8_t *buf, uint8_t len) {
       case '\n':
         return;
       case MSG_START:
-        hostSerial.sendFirst("T");
+        hostSerial.sendFirst("S");
         return 1;
       case MSG_END:
         hostSerial.sendEnd();
