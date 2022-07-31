@@ -5,12 +5,12 @@ import { NotSupportedException } from "../util";
 import { LoadReturnType, SignalCoder } from "./index";
 
 const COMMANDS: { [key: string]: string } = {
-	off:     '10100',
-	low:     '00100',
-	medium:  '01000',
-	high:    '10000',
-	light_1: '01010',
-	light_2: '10010',
+	off:     "10100",
+	low:     "00100",
+	medium:  "01000",
+	high:    "10000",
+	light_1: "01010",
+	light_2: "10010",
 };
 
 const COMMANDS_REV: { [key: string]: string } = {};

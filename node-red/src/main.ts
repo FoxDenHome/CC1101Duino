@@ -51,7 +51,7 @@ const signalStrings = `
 ^SMU;P0=-148;P1=-925;P2=741;P3=301;P4=-447;P5=494;P6=-300;P7=-214;D=1212121343456343434343434343434343457573430;CP=3;R=185;F=433.88;M=2;
 ^SMU;P0=-321;P1=318;P2=552;P3=-168;P4=-429;P5=-232;P6=724;D=0102323141423232314231414156314141423232310142314232313;CP=1;R=186;F=433.88;M=2;
 ^SMU;F=304.2;M=2;D=011011010011010011011010011010011010011;P0=417;P1=-417;CP=0;R=186;
-`.trim().split('\n');
+`.trim().split("\n");
 
 function main() {
     const mainCoder = new LineCoder();
@@ -65,10 +65,10 @@ function main() {
     }
 
     console.log(mainCoder.createSignalLine({
-        coder: 'minka_aire',
-        id: '00101001',
-        type: 'command',
-        command: 'light',
+        coder: "minka_aire",
+        id: "00101001",
+        type: "command",
+        command: "light",
     }));
 }
 

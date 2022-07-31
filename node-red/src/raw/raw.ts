@@ -21,11 +21,11 @@ export class RawSignal {
 
     static fromString(signalStr: string) {
         signalStr = signalStr.trim();
-        if (signalStr.length < 3 || !signalStr.startsWith('^S')) {
+        if (signalStr.length < 3 || !signalStr.startsWith("^S")) {
             return undefined;
         }
 
-        const spl = signalStr.substring(2).split(';');
+        const spl = signalStr.substring(2).split(";");
         if (spl.length < 3) {
             return undefined;
         }
@@ -40,24 +40,24 @@ export class RawSignal {
         const timings: number[] = [];
         let timingStr = undefined;
         for (const field of spl) {
-            const [key, value] = field.split('=', 2);
-            if (key.charAt(0) == 'P' && key.length > 1) {
+            const [key, value] = field.split("=", 2);
+            if (key.charAt(0) == "P" && key.length > 1) {
                 timingValues.set(key.charAt(1), parseInt(value, 10));
             } else {
                 switch (key) {
-                    case 'D':
+                    case "D":
                         timingStr = value;
                         break;
-                    case 'CP':
+                    case "CP":
                         clockIndex = parseInt(value, 10);
                         break;
-                    case 'R':
+                    case "R":
                         rssi = parseInt(value, 10);
                         break;
-                    case 'F':
+                    case "F":
                         frequency = parseFloat(value);
                         break;
-                    case 'M':
+                    case "M":
                         modulation = parseInt(value, 10);
                         break;
                     default:
@@ -91,7 +91,7 @@ export class RawSignal {
             M: this.modulation,
             R: repetitions,
             S: repetition_delay,
-            D: '',
+            D: "",
         };
 
         const packets = new Map<number, number>();
@@ -110,14 +110,14 @@ export class RawSignal {
             params.D += packet.toString();
         }
 
-        let payload = '^S;';
+        let payload = "^S;";
         for (const [key, value] of Object.entries(params)) {
             if (value === undefined) {
                 continue;
             }
             payload += `${key}=${value};`;
         }
-        payload += '\n';
+        payload += "\n";
 
         return payload;
     }

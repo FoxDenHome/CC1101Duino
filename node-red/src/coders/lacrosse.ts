@@ -50,7 +50,7 @@ export class LacrosseSignalCoder extends SignalCoder {
 
         switch (sensorType) {
             case 0b0000:
-                return this.makeSignal("temperature", sensorId, "C", rawValue - 50.0);
+                return this.makeSignal("temperature", sensorId, "°C", rawValue - 50.0);
             case 0b1110:
                 return this.makeSignal("humidity", sensorId, "%", rawValue);
             default:

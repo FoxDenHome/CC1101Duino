@@ -4,7 +4,7 @@ export default function (RED: any) {
     function CC1101DuinoEncoderNode(this: any, config: any) {
         const node = this;
         RED.nodes.createNode(node, config);
-        node.on('input', function(msg: any) {
+        node.on("input", function(msg: any) {
             node.send({
                 ...msg,
                 payload: coder.createSignalLine(msg.payload),
