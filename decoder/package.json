@@ -1,13 +1,13 @@
 {
-  "name": "@doridian/node-red-cc1101duino-decoder",
+  "name": "@doridian/node-red-cc1101duino",
   "version": "1.0.0",
-  "description": "",
+  "description": "Node-RED node for CC1101duino",
   "main": "dist/main.js",
   "scripts": {
     "build": "rimraf dist && tsc --project .",
     "start": "npm run build && node ./dist/main.js"
   },
-  "author": "",
+  "author": "Doridian",
   "license": "GPL-3.0-or-later",
   "devDependencies": {
     "@types/node": "^18.6.3",
