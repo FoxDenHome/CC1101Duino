@@ -11,6 +11,10 @@ export class BinarySignal {
         this.readerHook = undefined;
     }
 
+    static fromUntyped(rawBits: any[]) {
+        return new BinarySignal(rawBits.map(b => parseInt(b, 10)));
+    }
+
     matchAndStripHeader(header: number[], headerOffset: number = 0) {
         const headerCheckLength = header.length - headerOffset;
 

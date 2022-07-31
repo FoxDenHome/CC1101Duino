@@ -22,7 +22,7 @@ export class MinkaAireSignalCoder extends SignalCoder {
         for (const c of COMMANDS[signal.command]) {
             bits.push(c);
         }
-        return new BinarySignal(bits);
+        return BinarySignal.fromUntyped(bits);
     }
 
     getPacketizerClass() {
