@@ -15,9 +15,6 @@
 SignalDetectorClass signalDecoder;
 SimpleFIFO<int,FIFO_LENGTH> fifo; //store FIFO_LENGTH # ints
 
-float tx_freq = 0;
-int tx_mod = 0;
-
 const float rx_freq = 433.88;
 const int rx_mod = 2;
 
@@ -29,7 +26,6 @@ static uint8_t rssiCallback() {
 // handleRxInterrupt, timer1RxSystem and loopRxtiming come from SIGNALDuino
 unsigned long lastRxTime;
 static void handleRxInterrupt() {
-  static bool lastPinHigh = false;
   cli();
   const unsigned long curTime = micros();
   const unsigned long duration = curTime - lastRxTime;
@@ -113,7 +109,7 @@ void initRxSystem() {
   endTransmission();
 }
 
-void beginTransmission() {
+void beginTransmission(float tx_freq, byte tx_mod) {
   cli();
   detachInterrupt(digitalPinToInterrupt(PIN_GDO2));
   signalDecoder.reset();

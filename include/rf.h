@@ -6,7 +6,7 @@
 void loopRxSystem();
 void initRxSystem();
 void endTransmission();
-void beginTransmission();
+void beginTransmission(float tx_freq, byte tx_mod);
 
 extern float tx_freq;
 extern int tx_mod;
