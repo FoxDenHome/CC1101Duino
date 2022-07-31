@@ -18,7 +18,7 @@ SimpleFIFO<int,FIFO_LENGTH> fifo; //store FIFO_LENGTH # ints
 float tx_freq = 0;
 int tx_mod = 0;
 
-const float rx_freq = 433.92;
+const float rx_freq = 433.88;
 const int rx_mod = 2;
 
 static uint8_t rssiCallback() {
