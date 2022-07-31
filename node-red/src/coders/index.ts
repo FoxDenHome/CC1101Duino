@@ -2,13 +2,12 @@ import { Modulation } from "../modulations";
 import { SignalPacketizer } from "../packetizers/index";
 import { BinarySignal } from "../raw/binary";
 import { EndOfSignalError } from "../raw/index";
-import { Signal } from "../signals/index";
 import { NotSupportedException } from "../util";
 
 export type LoadReturnType = { new(): SignalCoder }[];
 
 export abstract class SignalCoder {
-    decode(signal: BinarySignal) {
+    decode(signal: BinarySignal): any | undefined {
         try {
             return this.decodeInternal(signal);
         } catch (e) {
@@ -19,7 +18,7 @@ export abstract class SignalCoder {
         }
     }
 
-    decodeInternal(_signal: BinarySignal): Signal | undefined {
+    decodeInternal(_signal: BinarySignal): any | undefined {
         throw new NotSupportedException();
     }
 

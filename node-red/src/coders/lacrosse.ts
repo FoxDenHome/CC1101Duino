@@ -1,7 +1,6 @@
 import { Modulation } from "../modulations";
 import { LacrossePacketizer } from "../packetizers/lacrosse";
 import { BinarySignal } from "../raw/binary";
-import { SensorSignal } from "../signals/sensor";
 import { LoadReturnType, SignalCoder } from "./index";
 
 export class LacrosseSignalCoder extends SignalCoder {
@@ -51,12 +50,22 @@ export class LacrosseSignalCoder extends SignalCoder {
 
         switch (sensorType) {
             case 0b0000:
-                return new SensorSignal(this.getName(), "temperature", sensorId, "C", rawValue - 50.0);
+                return this.makeSignal("temperature", sensorId, "C", rawValue - 50.0);
             case 0b1110:
-                return new SensorSignal(this.getName(), "humidity", sensorId, "%", rawValue);
+                return this.makeSignal("humidity", sensorId, "%", rawValue);
             default:
                 return undefined;
         }
+    }
+
+    makeSignal(sensorType: string, sensorId: string, unit: string, value: number) {
+        return {
+            coder: this.getName(),
+            sensorType,
+            sensorId,
+            unit,
+            value,
+        };
     }
 
     getPacketizerClass() {

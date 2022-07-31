@@ -2,7 +2,6 @@ import { readdirSync } from "fs";
 import { join } from "path";
 import { LoadReturnType, SignalCoder } from "../coders/index";
 import { SignalPacketizer } from "../packetizers/index";
-import { Signal } from "../signals";
 import { NotSupportedException } from "../util";
 import { RawSignal } from "./raw";
 
@@ -63,7 +62,7 @@ export class LineCoder {
     }
 
     processSignalLine(line: string) {
-        const res: Signal[] = [];
+        const res: any[] = [];
     
         const rawSignal = RawSignal.fromString(line);
         if (!rawSignal) {
