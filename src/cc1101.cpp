@@ -37,8 +37,11 @@ void CC1101Transceiver::setup() {
           // generator. Used for test. Works as normal mode, setting 0 (00), in
           // RX. 3 = Asynchronous serial mode, Data in on GDO0 and data out on
           // either of the GDOx pins.
+  CC1101_MAIN.setLengthConfig(2);
   CC1101_MAIN.setSyncMode(0);
-  CC1101_MAIN.SpiWriteReg(CC1101_IOCFG0, 0x2E);
+  CC1101_MAIN.setWhiteData(false);
+  CC1101_MAIN.setCrc(false);
+  CC1101_MAIN.SpiWriteReg(CC1101_IOCFG0, 0x2D);
   CC1101_MAIN.SpiWriteReg(CC1101_IOCFG1, 0x2E);
   CC1101_MAIN.SpiWriteReg(CC1101_IOCFG2, 0x0D);
   CC1101_MAIN.setPA(100);

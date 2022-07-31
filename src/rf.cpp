@@ -1,6 +1,7 @@
 #include "rf.h"
 
 #include <Arduino.h>
+#include <TimerOne.h>
 #include "SimpleFIFO.h"
 #include "signalDecoder.h"
 #include "config.h"
@@ -17,7 +18,7 @@ SimpleFIFO<int,FIFO_LENGTH> fifo; //store FIFO_LENGTH # ints
 float tx_freq = 0;
 int tx_mod = 0;
 
-const float rx_freq = 433.88;
+const float rx_freq = 433.92;
 const int rx_mod = 2;
 
 static uint8_t rssiCallback() {
@@ -25,9 +26,10 @@ static uint8_t rssiCallback() {
   return CC1101_MAIN.getRssi();
 }
 
-// handleInterrupt and loopRxtiming come from SIGNALDuino
+// handleRxInterrupt, timer1RxSystem and loopRxtiming come from SIGNALDuino
 unsigned long lastRxTime;
-static void handleInterrupt() {
+static void handleRxInterrupt() {
+  static bool lastPinHigh = false;
   cli();
   const unsigned long curTime = micros();
   const unsigned long duration = curTime - lastRxTime;
@@ -40,28 +42,35 @@ static void handleInterrupt() {
     else {
       sDuration = maxPulse; // Maximalwert set to maxPulse defined in lib.
     }
-    if (digitalRead(PIN_RX) == HIGH) { // Wenn jetzt high ist, dann muss vorher low gewesen sein, und dafuer gilt die gemessene Dauer.
+    if (isHigh(PIN_RX)) { // Wenn jetzt high ist, dann muss vorher low gewesen sein, und dafuer gilt die gemessene Dauer.
       sDuration = -sDuration;
     }
+    
     fifo.enqueue(sDuration);
   } // else => trash
   sei();
 }
 
-void loopRxSystem() {
+void timer1RxSystem() {
   cli();
   const unsigned long  duration = micros() - lastRxTime;
 
+  Timer1.setPeriod(maxPulse);
+
   if (duration >= maxPulse) { //Auf Maximalwert pruefen.
     int sDuration = maxPulse;
-    if (digitalRead(PIN_RX) == LOW) { // Wenn jetzt low ist, ist auch weiterhin low
+    if (isLow(PIN_RX)) { // Wenn jetzt low ist, ist auch weiterhin low
       sDuration = -sDuration;
     }
     fifo.enqueue(sDuration);
     lastRxTime = micros();
+  } else if (duration > 10000) {
+    Timer1.setPeriod(maxPulse-duration+16);
   }
   sei();
+}
 
+void loopRxSystem() {
   int val;
   while (fifo.count() > 0) {               // Puffer auslesen und an Dekoder uebergeben
     val = fifo.dequeue();
@@ -92,6 +101,9 @@ static size_t writeCallback(const uint8_t *buf, uint8_t len) {
 }
 
 void initRxSystem() {
+  Timer1.initialize(maxPulse);
+  Timer1.attachInterrupt(timer1RxSystem);
+
   signalDecoder.setRSSICallback(rssiCallback);
   signalDecoder.setStreamCallback(writeCallback);
   signalDecoder.MredEnabled = false;
@@ -122,6 +134,6 @@ void endTransmission() {
   cli();
   signalDecoder.reset();
   fifo.flush();
-  attachInterrupt(digitalPinToInterrupt(PIN_GDO2), handleInterrupt, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PIN_GDO2), handleRxInterrupt, CHANGE);
   sei();
 }
