@@ -12,11 +12,17 @@ const COMMANDS: { [key: string]: string } = {
 	light_1: '01010',
 	light_2: '10010',
 };
+
+const COMMANDS_REV: { [key: string]: string } = {};
+for (const [name, bits] of Object.entries(COMMANDS)) {
+    COMMANDS_REV[bits] = name;
+}
+
 COMMANDS.light = COMMANDS.light_1;
 
 export class MinkaAireSignalCoder extends SignalCoder {
     encode(signal: any): BinarySignal {
-        if (signal.type !== 'command') {
+        if (signal.type !== "command") {
             throw new NotSupportedException();
         }
 
@@ -28,6 +34,15 @@ export class MinkaAireSignalCoder extends SignalCoder {
             bits.push(c);
         }
         return BinarySignal.fromUntyped(bits);
+    }
+
+    decode(signal: BinarySignal): any {
+        return {
+            coder: this.getName(),
+            type: "command",
+            id: signal.readBitsAsString(8),
+            command: COMMANDS_REV[signal.readBitsAsString(5)],
+        }
     }
 
     getPacketizerClass() {

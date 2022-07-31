@@ -65,7 +65,7 @@ export class SignalPacketizerFixedVariable extends SignalPacketizer {
             lastTiming = timing;
         }
 
-        if (curSignal.length > this.minLen) {
+        if (curSignal.length >= this.minLen) {
             signals.push(new BinarySignal(curSignal));
         }
 

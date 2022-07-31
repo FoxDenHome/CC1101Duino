@@ -34,8 +34,11 @@ export class RawSignal {
     
         let rssi = -1;
         let clockIndex = -1;
+        let frequency = 433.88;
+        let modulation = Modulation.ASK_OOK;
         const timingValues = new Map<string, number>();
         const timings: number[] = [];
+        let timingStr = undefined;
         for (const field of spl) {
             const [key, value] = field.split('=', 2);
             if (key.charAt(0) == 'P' && key.length > 1) {
@@ -43,13 +46,7 @@ export class RawSignal {
             } else {
                 switch (key) {
                     case 'D':
-                        for (const char of value) {
-                            const tv = timingValues.get(char);
-                            if (!tv) {
-                                return undefined;
-                            }
-                            timings.push(tv);
-                        }
+                        timingStr = value;
                         break;
                     case 'CP':
                         clockIndex = parseInt(value, 10);
@@ -57,17 +54,35 @@ export class RawSignal {
                     case 'R':
                         rssi = parseInt(value, 10);
                         break;
+                    case 'F':
+                        frequency = parseFloat(value);
+                        break;
+                    case 'M':
+                        modulation = parseInt(value, 10);
+                        break;
                     default:
                         break;
                 }
             }
         }
 
+        if (!timingStr) {
+            return undefined;
+        }
+
+        for (const char of timingStr) {
+            const tv = timingValues.get(char);
+            if (!tv) {
+                return undefined;
+            }
+            timings.push(tv);
+        }
+
         if (timings.length < 1) {
             return undefined;
         }
     
-        return new RawSignal(signalType, clockIndex, timings, Modulation.ASK_OOK, 433.88, rssi);
+        return new RawSignal(signalType, clockIndex, timings, modulation, frequency, rssi);
     }
 
     toCommandString(repetitions: number, repetition_delay: number): string {
@@ -107,18 +122,19 @@ export class RawSignal {
         return payload;
     }
 
-    findClosest(timing: number, tolerance: number = 200) {
+    findClosest(timing: number, tolerance: number = 200, ignoreSign: boolean = false) {
         let bestTimingDist, bestTiming;
         
         const timingSign = Math.sign(timing);
+        const timingAbs = Math.abs(timing);
 
         for (const haveTiming of this.uniqueTimings) {
-            // We never want to turn a low pulse into a high pulse
-            if (Math.sign(haveTiming) !== timingSign) {
+            // We never want to turn a low pulse into a high pulse, unless requested
+            if (!ignoreSign && Math.sign(haveTiming) !== timingSign) {
                 continue;
             }
 
-            const timingDist = Math.abs(timing - haveTiming);
+            const timingDist = Math.abs(timingAbs - Math.abs(haveTiming));
             if (timingDist > tolerance) {
                 continue;
             }
@@ -130,5 +146,13 @@ export class RawSignal {
         }
 
         return bestTiming;
+    }
+
+    findClosestAbs(timing: number, tolerance: number = 200) {
+        const actualTiming = this.findClosest(timing, tolerance, true);
+        if (actualTiming) {
+            return Math.abs(actualTiming);
+        }
+        return undefined;
     }
 }

@@ -59,6 +59,10 @@ export class BinarySignal {
         return res;
     }
 
+    readBitsAsString(num: number) {
+        return this.readBits(num).join("");
+    }
+
     readNumberLSBFirst(bits: number) {
         let res = 0;
         for (let i = 0; i < bits; i++) {

@@ -1,26 +1,52 @@
 import { BinarySignal } from "../raw/binary";
 import { RawSignal } from "../raw/raw";
-import { SignalPacketizer } from "./index";
+import { SignalPacketizerFixed } from "./fixed";
 
-export class SignalPacketizerOnOffBit extends SignalPacketizer {
-    tolerance: number;
-    minLen: number;
-    pulseLen: number;
-
+export class SignalPacketizerOnOffBit extends SignalPacketizerFixed {
     constructor() {
         super();
-        this.tolerance = 200;
-        this.minLen = 5;
-        this.pulseLen = 0;
+        this.maxConsecutivePulse = 2;
+    }
+
+    unpack(rawSignal: RawSignal): BinarySignal[] {
+        this.minLen *= 3
+        const binSigs = super.unpack(rawSignal);
+        this.minLen /= 3;
+
+        const signals = [];
+        let curSignal = [];
+        for (const binSig of binSigs) {
+            const binBits = binSig.bits;
+
+            // Align ourselves
+            for (let i = 0; i < binBits.length - 2; i++) {
+                if (binBits[i] !== 1 || binBits[i + 1] !== 0) {
+                    if (curSignal.length >= this.minLen) {
+                        signals.push(new BinarySignal(curSignal));
+                    }
+                    curSignal = [];
+                    continue;
+                }
+                curSignal.push(binBits[i + 2]);
+                i += 2;
+            }
+
+            if (curSignal.length >= this.minLen) {
+                signals.push(new BinarySignal(curSignal));
+            }
+            curSignal = [];
+        }
+
+        return signals;
     }
 
     pack(signal: BinarySignal) {
-        const timings = [];
+        const bits = [];
         for (const bit of signal.bits) {
-            timings.push(this.pulseLen);
-            timings.push(-this.pulseLen);
-            timings.push(bit ? this.pulseLen : -this.pulseLen);
+            bits.push(1);
+            bits.push(0);
+            bits.push(bit);
         }
-        return new RawSignal("MU", 0, timings);
+        return super.pack(new BinarySignal(bits));
     }
 }
