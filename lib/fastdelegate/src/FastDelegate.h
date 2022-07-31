@@ -178,6 +178,7 @@ namespace fastdelegate {
 			// If the compile fails here, it means the compiler has peculiar
 			// unions which would prevent the cast from working.
 #ifndef ESP32
+			__attribute__((unused))
 			typedef int ERROR_CantUseHorrible_cast[sizeof(InputClass) == sizeof(u)
 				&& sizeof(InputClass) == sizeof(OutputClass) ? 1 : -1];
 #endif		
@@ -296,6 +297,7 @@ namespace fastdelegate {
 				// Unsupported member function type -- force a compile failure.
 				// (it's illegal to have a array with negative size).
 #ifndef ESP32
+				__attribute__((unused))
 				typedef char ERROR_Unsupported_member_function_pointer_on_this_compiler[N - 100];
 #endif
 				return 0;
@@ -353,6 +355,7 @@ namespace fastdelegate {
 					}s;
 				} u;
 				// Check that the horrible_cast will work
+				__attribute__((unused))
 				typedef int ERROR_CantUsehorrible_cast[sizeof(function_to_bind) == sizeof(u.s) ? 1 : -1];
 				u.func = function_to_bind;
 				bound_func = u.s.funcaddress;
@@ -410,6 +413,7 @@ namespace fastdelegate {
 					MicrosoftVirtualMFP s;
 				} u2;
 				// Check that the horrible_cast<>s will work
+				__attribute__((unused))
 				typedef int ERROR_CantUsehorrible_cast[sizeof(function_to_bind) == sizeof(u.s)
 					&& sizeof(function_to_bind) == sizeof(u.ProbeFunc)
 					&& sizeof(u2.virtfunc) == sizeof(u2.s) ? 1 : -1];
@@ -456,6 +460,7 @@ namespace fastdelegate {
 				// We can generate correct code in this case. To prevent an incorrect call from
 				// ever being made, on MSVC6 we generate a warning, and call a function to
 				// make the program crash instantly.
+				__attribute__((unused))
 				typedef char ERROR_VC6CompilerBug[-100];
 				return 0;
 			}
@@ -488,6 +493,7 @@ namespace fastdelegate {
 					} s;
 				} u;
 				// Check that the horrible_cast will work
+				__attribute__((unused))
 				typedef int ERROR_CantUsehorrible_cast[sizeof(XFuncType) == sizeof(u.s) ? 1 : -1];
 				u.func = function_to_bind;
 				bound_func = u.s.funcaddress;
@@ -789,6 +795,7 @@ namespace fastdelegate {
 				// and data pointers have different sizes.
 				// If you get this error, you need to #undef FASTDELEGATE_USESTATICFUNCTIONHACK.
 #ifndef ESP32
+				__attribute__((unused))
 				typedef int ERROR_CantUseEvilMethod[sizeof(GenericClass *) == sizeof(function_to_bind) ? 1 : -1];
 #endif
 				m_pthis = horrible_cast<GenericClass *>(function_to_bind);
@@ -806,6 +813,7 @@ namespace fastdelegate {
 				// and data pointers have different sizes.
 				// If you get this error, you need to #undef FASTDELEGATE_USESTATICFUNCTIONHACK.
 #ifndef ESP32
+				__attribute__((unused))
 				typedef int ERROR_CantUseEvilMethod[sizeof(UnvoidStaticFuncPtr) == sizeof(this) ? 1 : -1];
 #endif
 				return horrible_cast<UnvoidStaticFuncPtr>(this);

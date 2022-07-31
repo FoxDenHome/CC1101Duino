@@ -1106,7 +1106,7 @@ bool SignalDetectorClass::getSync()
 			uint16_t syncabs = abs(pattern[p]);
 			if ((pattern[p] < 0) &&
 				(syncabs < syncMaxMicros && syncabs / pattern[clock] <= syncMaxFact) &&
-				(syncabs > syncMinFact*pattern[clock]) &&
+				(syncabs > (uint16_t)syncMinFact*pattern[clock]) &&
 				(histo[p] < messageLen*0.08) && (histo[p] > 1)
 				)
 			{

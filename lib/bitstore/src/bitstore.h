@@ -208,8 +208,8 @@ const uint16_t BitStore<bufSize>::getSize()
 template<uint8_t bufSize>
 bool BitStore<bufSize>::moveLeft(const uint16_t begin)
 {
-	if (begin == 0 || begin >= valcount) return false;
-	if (begin == valcount - 1)
+	if (begin == 0 || begin >= (uint16_t)valcount) return false;
+	if (begin == (uint16_t)valcount - 1)
 	 {
 		reset();
 		return true;
