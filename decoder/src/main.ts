@@ -1,7 +1,4 @@
-import { SignalDecoder } from "./decoders/index";
-import { LacrosseSignalDecoder } from "./decoders/lacrosse";
-import { SignalPacketizer } from "./packetizers/index";
-import { RawSignal } from "./raw/raw";
+import { LineDecoder } from "./raw/line";
 
 const signalStrings = `
 ^SMU;P0=19800;P1=-1086;P2=1412;P3=618;P4=-8096;P5=164;P6=-552;D=0121212131213121212121212131313121212121213121312131213121313121213121312131213131213134565;CP=3;R=190;
@@ -55,54 +52,9 @@ const signalStrings = `
 ^SMU;P0=-321;P1=318;P2=552;P3=-168;P4=-429;P5=-232;P6=724;D=0102323141423232314231414156314141423232310142314232313;CP=1;R=186;
 `.trim().split('\n');
 
-class MainDecoder {
-    packetizers: Map<typeof SignalPacketizer, SignalPacketizer> = new Map();
-    decodersByPacketizer: Map<SignalPacketizer, SignalDecoder[]> = new Map();
-
-    constructor() {
-        
-    }
-
-    loadDecoder(decoder: SignalDecoder) {
-        const PacketizerClass = decoder.getPacketizerClass();
-        
-        if (!this.packetizers.has(PacketizerClass)) {
-            const packetizer = new PacketizerClass();
-            this.packetizers.set(PacketizerClass, packetizer);
-            this.decodersByPacketizer.set(packetizer, []);
-        }
-    
-        this.decodersByPacketizer.get(this.packetizers.get(PacketizerClass)!)!.push(decoder);
-    }
-
-    loadDecoders(decoders: SignalDecoder[]) {
-        for (const decoder of decoders) {
-            this.loadDecoder(decoder);
-        }
-    }
-
-    processSignalLine(line: string) {
-        const res = [];
-    
-        const rawSignal = RawSignal.fromString(line);
-        for (const [packetizer, decoders] of this.decodersByPacketizer.entries()) {
-            for (const packetizedSignal of packetizer.packetize(rawSignal)) {
-                for (const decoder of decoders) {
-                    const signal = decoder.decode(packetizedSignal);
-                    if (signal) {
-                        res.push(signal);
-                    }
-                }
-            }
-        }
-    
-        return res;
-    }
-}
-
 function main() {
-    const mainDecoder = new MainDecoder();
-    mainDecoder.loadDecoder(new LacrosseSignalDecoder());
+    const mainDecoder = new LineDecoder();
+    mainDecoder.loadAllDecoders();
 
     for (const signalStr of signalStrings) {
         const res = mainDecoder.processSignalLine(signalStr);

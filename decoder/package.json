@@ -1,5 +1,5 @@
 {
-  "name": "decoder",
+  "name": "@doridian/node-red-cc1101duino-decoder",
   "version": "1.0.0",
   "description": "",
   "main": "dist/main.js",
@@ -13,5 +13,11 @@
     "@types/node": "^18.6.3",
     "rimraf": "^3.0.2",
     "typescript": "^4.7.4"
-  }
+  },
+  "node-red"     : {
+    "version": ">=2.0.0",
+    "nodes": {
+        "cc1101duino-decoder": "dist/red/cc1101duino-decoder.js"
+    }
+}
 }

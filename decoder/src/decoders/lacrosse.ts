@@ -1,7 +1,7 @@
 import { LacrossePacketizer } from "../packetizers/lacrosse";
 import { BinarySignal } from "../raw/binary";
 import { SensorSignal } from "../signals/sensor";
-import { SignalDecoder } from "./index";
+import { LoadReturnType, SignalDecoder } from "./index";
 
 export class LacrosseSignalDecoder extends SignalDecoder {
     decodeInternal(signal: BinarySignal) {
@@ -61,4 +61,8 @@ export class LacrosseSignalDecoder extends SignalDecoder {
     getPacketizerClass() {
         return LacrossePacketizer;
     }
+}
+
+export function load(): LoadReturnType {
+    return [LacrosseSignalDecoder];
 }

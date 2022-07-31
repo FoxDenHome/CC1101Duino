@@ -14,7 +14,16 @@ export class RawSignal {
     }
 
     static fromString(signalStr: string) {
+        signalStr = signalStr.trim();
+        if (signalStr.length < 3 || !signalStr.startsWith('^S')) {
+            return undefined;
+        }
+
         const spl = signalStr.substring(2).split(';');
+        if (spl.length < 3) {
+            return undefined;
+        }
+
         const signalType = spl.shift()!;
     
         let rssi = -1;
@@ -23,13 +32,17 @@ export class RawSignal {
         const timings: number[] = [];
         for (const field of spl) {
             const [key, value] = field.split('=', 2);
-            if (key.charAt(0) == 'P') {
+            if (key.charAt(0) == 'P' && key.length > 1) {
                 timingValues.set(key.charAt(1), parseInt(value, 10));
             } else {
                 switch (key) {
                     case 'D':
                         for (const char of value) {
-                            timings.push(timingValues.get(char)!);
+                            const tv = timingValues.get(char);
+                            if (!tv) {
+                                return undefined;
+                            }
+                            timings.push(tv);
                         }
                         break;
                     case 'CP':
@@ -38,8 +51,14 @@ export class RawSignal {
                     case 'R':
                         rssi = parseInt(value, 10);
                         break;
+                    default:
+                        break;
                 }
             }
+        }
+
+        if (timings.length < 1) {
+            return undefined;
         }
     
         return new RawSignal(signalType, clockIndex, rssi, timings);

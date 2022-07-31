@@ -3,6 +3,8 @@ import { BinarySignal } from "../raw/binary";
 import { EndOfSignalError } from "../raw/index";
 import { Signal } from "../signals/index";
 
+export type LoadReturnType = { new(): SignalDecoder }[];
+
 export abstract class SignalDecoder {
     decode(signal: BinarySignal) {
         try {
@@ -18,4 +20,8 @@ export abstract class SignalDecoder {
     abstract decodeInternal(signal: BinarySignal): Signal | undefined;
 
     abstract getPacketizerClass(): { new(): SignalPacketizer };
+}
+
+export function load(): LoadReturnType {
+    return [];
 }
