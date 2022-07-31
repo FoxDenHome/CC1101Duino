@@ -88,7 +88,11 @@ static size_t writeCallback(const uint8_t *buf, uint8_t len) {
         hostSerial.sendFirst("S");
         return 1;
       case MSG_END:
-        hostSerial.sendEnd();
+        hostSerial.sendNext("F=");
+        hostSerial.sendNext(String(rx_freq));
+        hostSerial.sendNext(";M=");
+        hostSerial.sendNext(String(rx_mod));
+        hostSerial.sendEnd(";");
         return 1;
     }
   }

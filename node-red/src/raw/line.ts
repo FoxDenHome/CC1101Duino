@@ -3,11 +3,11 @@ import { join } from "path";
 import { LoadReturnType, SignalCoder } from "../coders/index";
 import { SignalPacketizer } from "../packetizers/index";
 import { NotSupportedException } from "../util";
+import { BinarySignal } from "./binary";
 import { RawSignal } from "./raw";
 
 export class LineCoder {
     packetizers: Map<typeof SignalPacketizer, SignalPacketizer> = new Map();
-    codersByPacketizer: Map<SignalPacketizer, SignalCoder[]> = new Map();
     coderByName: Map<string, SignalCoder> = new Map();
 
     constructor() {
@@ -32,12 +32,9 @@ export class LineCoder {
         const PacketizerClass = coder.getPacketizerClass();
         
         if (!this.packetizers.has(PacketizerClass)) {
-            const packetizer = new PacketizerClass();
-            this.packetizers.set(PacketizerClass, packetizer);
-            this.codersByPacketizer.set(packetizer, []);
+            this.packetizers.set(PacketizerClass, new PacketizerClass());
         }
-    
-        this.codersByPacketizer.get(this.packetizers.get(PacketizerClass)!)!.push(coder);
+
         this.coderByName.set(coder.getName(), coder);
     }
 
@@ -69,26 +66,32 @@ export class LineCoder {
             return res;
         }
 
-        for (const [packetizer, decoders] of this.codersByPacketizer.entries()) {
-            let packetizedSignals;
-            try {
-                packetizedSignals = packetizer.unpack(rawSignal);
-            } catch (e) {
-                if (e instanceof NotSupportedException) {
-                    continue;
-                }
-                throw e;
+        const packetizerResults = new Map<typeof SignalPacketizer, BinarySignal[]>();
+
+        for (const coder of this.coderByName.values()) {
+            if (Math.abs(rawSignal.frequency - coder.getFrequency()) > coder.getFrequencyTolerance()) {
+                continue;
             }
+
+            if (rawSignal.modulation !== coder.getModulation()) {
+                continue;
+            }
+
+            const PacketizerClass = coder.getPacketizerClass();
+            let packetizedSignals = packetizerResults.get(PacketizerClass);
+            if (packetizedSignals === undefined) {
+                packetizedSignals = this.packetizers.get(PacketizerClass)!.unpack(rawSignal);
+                packetizerResults.set(PacketizerClass, packetizedSignals);
+            }
+
             for (const packetizedSignal of packetizedSignals) {
-                for (const decoder of decoders) {
-                    const signal = decoder.decode(packetizedSignal);
-                    if (signal) {
-                        res.push(signal);
-                    }
+                const signal = coder.decode(packetizedSignal);
+                if (signal) {
+                    res.push(signal);
                 }
             }
         }
-    
+
         return res;
     }
 }

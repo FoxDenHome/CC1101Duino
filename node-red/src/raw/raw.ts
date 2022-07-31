@@ -34,8 +34,8 @@ export class RawSignal {
     
         let rssi = -1;
         let clockIndex = -1;
-        let frequency = 433.88;
-        let modulation = Modulation.ASK_OOK;
+        let frequency = 0;
+        let modulation = Modulation.INVALID;
         const timingValues = new Map<string, number>();
         const timings: number[] = [];
         let timingStr = undefined;

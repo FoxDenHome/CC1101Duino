@@ -41,6 +41,10 @@ export abstract class SignalCoder {
     getRepetitionDelay(): number {
         return 10000;
     }
+
+    getFrequencyTolerance(): number {
+        return 1.0;
+    }
 }
 
 export function load(): LoadReturnType {
