@@ -15,8 +15,8 @@
 SignalDetectorClass signalDecoder;
 SimpleFIFO<int,FIFO_LENGTH> fifo; //store FIFO_LENGTH # ints
 
-const float rx_freq = 433.88;
-const int rx_mod = 2;
+const float rx_freq = DEFAULT_FREQUENCY;
+const int rx_mod = DEFAULT_MODULATION;
 
 static uint8_t rssiCallback() {
   cc1101.select();

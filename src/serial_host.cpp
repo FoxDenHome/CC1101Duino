@@ -24,8 +24,8 @@ static bool transmitData(const String& buffer) {
 
   byte val_start = 0;
 
-  float frequency = 433.88; // Default
-  byte modulation = 2; // ASK/OOK
+  float frequency = DEFAULT_FREQUENCY;
+  byte modulation = DEFAULT_MODULATION;
   uint32_t packets[10];
   byte packet_pincfg[10];
   byte data[128];
