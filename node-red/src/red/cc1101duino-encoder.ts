@@ -5,7 +5,10 @@ export default function (RED: any) {
         const node = this;
         RED.nodes.createNode(node, config);
         node.on('input', function(msg: any) {
-            node.send(coder.createSignalLine(msg.payload));
+            node.send({
+                ...msg,
+                payload: coder.createSignalLine(msg.payload),
+            });
         });
     }
 
