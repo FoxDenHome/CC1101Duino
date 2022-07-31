@@ -1,7 +1,7 @@
 {
   "name": "@doridian/node-red-cc1101duino",
   "private": false,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Node-RED node for CC1101duino",
   "main": "dist/main.js",
   "scripts": {
