@@ -2,10 +2,10 @@
   "name": "@doridian/node-red-cc1101duino",
   "private": false,
   "version": "1.6.2",
-  "description": "Node-RED node for CC1101duino",
+  "description": "Node-RED nodes for CC1101duino",
   "main": "dist/main.js",
   "scripts": {
-    "build": "rimraf dist && tsc --project . && cp src/red/*.html dist/red/",
+    "build": "rimraf dist && tsc --project . && cp src/nodes/*.html dist/nodes/",
     "start": "npm run build && node ./dist/main.js",
     "prepare": "npm run build"
   },
@@ -19,8 +19,8 @@
   "node-red": {
     "version": ">=2.0.0",
     "nodes": {
-        "cc1101duino-decoder": "dist/red/cc1101duino-decoder.js",
-        "cc1101duino-encoder": "dist/red/cc1101duino-encoder.js"
+        "cc1101duino-decoder": "dist/nodes/cc1101duino-decoder.js",
+        "cc1101duino-encoder": "dist/nodes/cc1101duino-encoder.js"
     }
   }
 }
