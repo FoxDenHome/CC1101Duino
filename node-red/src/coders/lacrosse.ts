@@ -61,7 +61,8 @@ export class LacrosseSignalCoder extends SignalCoder {
     makeSignal(sensorType: string, sensorId: string, unit: string, value: number) {
         return {
             coder: this.getName(),
-            type: sensorType,
+            type: "sensor",
+            subtype: sensorType,
             id: sensorId,
             unit,
             value,
