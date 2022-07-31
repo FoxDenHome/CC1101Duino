@@ -1,3 +1,8 @@
+import { SignalDecoder } from "./decoders/index";
+import { LacrosseSignalDecoder } from "./decoders/lacrosse";
+import { SignalPacketizer } from "./packetizers/index";
+import { RawSignal } from "./raw/raw";
+
 const signalStrings = `
 ^SMU;P0=19800;P1=-1086;P2=1412;P3=618;P4=-8096;P5=164;P6=-552;D=0121212131213121212121212131313121212121213121312131213121313121213121312131213131213134565;CP=3;R=190;
 ^SMU;P0=-7768;P1=-104;P2=148;P3=-152;P4=24460;P5=-1074;P6=1442;P7=619;D=1234565656575657565656565656575757565656565657565756575657565757565657565756575657575657570;CP=7;R=190;
@@ -50,369 +55,61 @@ const signalStrings = `
 ^SMU;P0=-321;P1=318;P2=552;P3=-168;P4=-429;P5=-232;P6=724;D=0102323141423232314231414156314141423232310142314232313;CP=1;R=186;
 `.trim().split('\n');
 
-class EndOfSignalError extends Error { }
-
-class BinarySignal {
-    bits: number[];
-    offset: number;
-    readerHook?: (bit: number, offset: number) => void;
-
-    constructor(bits: number[]) {
-        this.bits = bits;
-        this.offset = 0;
-        this.readerHook = undefined;
-    }
-
-    matchAndStripHeader(header: number[], headerOffset: number = 0) {
-        const headerCheckLength = header.length - headerOffset;
-
-        for (let i = 0; i < headerCheckLength; i++) {
-            if (this.bits[i] !== header[i + headerOffset]) {
-                return false;
-            }
-        }
-
-        this.offset += headerCheckLength;
-        return true;
-    }
-
-    // headerMissingAllowed is so we can catch packets with part of the header cut off, as usually happens
-    matchAndStripHeaderFuzzy(header: number[], headerMissingAllowed: number = 1) {
-        for (let i = 0; i <= headerMissingAllowed; i++) {
-            if (this.matchAndStripHeader(header, i)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    readBit() {
-        if (this.offset >= this.bits.length) {
-            throw new EndOfSignalError();
-        }
-
-        const bit = this.bits[this.offset];
-        if (this.readerHook) {
-            this.readerHook(bit, this.offset);
-        }
-        this.offset++;
-        return bit;
-    }
-
-    readBits(num: number) {
-        const res = [];
-        for (let i = 0; i < num; i++) {
-            res.push(this.readBit());
-        }
-        return res;
-    }
-
-    readNumberLSBFirst(bits: number) {
-        let res = 0;
-        for (let i = 0; i < bits; i++) {
-            res |= this.readBit() << i;
-        }
-        return res;
-    }
-
-    readNumberMSBFirst(bits: number) {
-        let res = 0;
-        for (let i = bits - 1; i >= 0; i--) {
-            res |= this.readBit() << i;
-        }
-        return res;
-    }
-}
-
-class RawSignal {
-    signalType: string;
-    clockIndex: number;
-    rssi: number;
-    timings: number[];
-    uniqueTimings: Set<number>;
-
-    constructor(signalType: string, clockIndex: number, rssi: number, timings: number[]) {
-        this.signalType = signalType;
-        this.clockIndex = clockIndex;
-        this.rssi = rssi;
-        this.uniqueTimings = new Set(timings);
-        this.timings = timings;
-    }
-
-    static fromString(signalStr: string) {
-        const spl = signalStr.substring(2).split(';');
-        const signalType = spl.shift()!;
-    
-        let rssi = -1;
-        let clockIndex = -1;
-        const timingValues = new Map<string, number>();
-        const timings: number[] = [];
-        for (const field of spl) {
-            const [key, value] = field.split('=', 2);
-            if (key.charAt(0) == 'P') {
-                timingValues.set(key.charAt(1), parseInt(value, 10));
-            } else {
-                switch (key) {
-                    case 'D':
-                        for (const char of value) {
-                            timings.push(timingValues.get(char)!);
-                        }
-                        break;
-                    case 'CP':
-                        clockIndex = parseInt(value, 10);
-                        break;
-                    case 'R':
-                        rssi = parseInt(value, 10);
-                        break;
-                }
-            }
-        }
-    
-        return new RawSignal(signalType, clockIndex, rssi, timings);
-    }
-
-    findClosest(timing: number, tolerance: number = 200) {
-        let bestTimingDist, bestTiming;
-        
-        const timingSign = Math.sign(timing);
-
-        for (const haveTiming of this.uniqueTimings) {
-            // We never want to turn a low pulse into a high pulse
-            if (Math.sign(haveTiming) !== timingSign) {
-                continue;
-            }
-
-            const timingDist = Math.abs(timing - haveTiming);
-            if (timingDist > tolerance) {
-                continue;
-            }
-
-            if (bestTimingDist === undefined || timingDist < bestTimingDist) {
-                bestTiming = haveTiming;
-                bestTimingDist = timingDist;
-            }
-        }
-
-        return bestTiming;
-    }
-}
-
-class NotImplementedError extends Error { } 
-
-interface Signal {
-
-}
-
-abstract class SignalDecoder {
-    decode(signal: BinarySignal) {
-        try {
-            return this.decodeInternal(signal);
-        } catch (e) {
-            if (e instanceof EndOfSignalError) {
-                return undefined;
-            }
-            throw e;
-        }
-    }
-
-    abstract decodeInternal(signal: BinarySignal): Signal | undefined;
-
-    abstract getPacketizerClass(): { new(): SignalPacketizer };
-}
-
-abstract class SignalPacketizer {
-    abstract packetize(rawSignal: RawSignal): BinarySignal[];
-}
-
-class SignalPacketizerFixedVariable extends SignalPacketizer {
-    tolerance: number;
-    minLen: number;
-    fixedPulse: number;
-    zeroPulse: number;
-    onePulse: number;
+class MainDecoder {
+    packetizers: Map<typeof SignalPacketizer, SignalPacketizer> = new Map();
+    decodersByPacketizer: Map<SignalPacketizer, SignalDecoder[]> = new Map();
 
     constructor() {
-        super();
-        this.tolerance = 200;
-        this.minLen = 5;
-        this.fixedPulse = 0;
-        this.zeroPulse = 0;
-        this.onePulse = 0;
-    }
-
-    packetize(rawSignal: RawSignal) {
-        const actualFixedPulse = rawSignal.findClosest(this.fixedPulse, this.tolerance);
-        const actualZeroPulse = rawSignal.findClosest(this.zeroPulse, this.tolerance);
-        const actualOnePulse = rawSignal.findClosest(this.onePulse, this.tolerance);
-
-        if (!actualFixedPulse || !actualZeroPulse || !actualOnePulse) {
-            return [];
-        }
-
-        const defaultPulse = (actualFixedPulse < 0) ? actualFixedPulse : actualZeroPulse;
-
-        let signals = [];
-        let curSignal = [];
-        let lastTiming = defaultPulse;
-
-        looptimings:
-        for (const timing of rawSignal.timings) {
-            if (timing != actualFixedPulse && timing != actualZeroPulse && timing != actualOnePulse) {
-                if (curSignal.length >= this.minLen) {
-                    signals.push(new BinarySignal(curSignal));
-                }
-                curSignal = [];
-                lastTiming = defaultPulse;
-                continue;
-            }
-            
-            if (lastTiming == actualFixedPulse) {
-                switch (timing) {
-                    case actualFixedPulse:
-                        continue looptimings;
-                    case actualOnePulse:
-                        curSignal.push(1);
-                        break;
-                    case actualZeroPulse:
-                        curSignal.push(0);
-                        break;
-                }
-            } else if (timing !== actualFixedPulse) {
-                if (curSignal.length >= this.minLen) {
-                    signals.push(new BinarySignal(curSignal));
-                }
-                curSignal = [];
-            }
-
-            lastTiming = timing;
-        }
-
-        if (curSignal.length > this.minLen) {
-            signals.push(new BinarySignal(curSignal));
-        }
-
-        return signals;
-    }
-}
-
-class LacrossePacketizer extends SignalPacketizerFixedVariable {
-    constructor() {
-        super();
-        this.fixedPulse = -975;
-        this.zeroPulse = 1400;
-        this.onePulse = 550;
-        this.minLen = 40;
-    }
-}
-
-class SensorSignal implements Signal {
-    constructor(public origin: string, public sensorType: string, public sensorId: string, public unit: string, public value: number) {
-
-    }
-}
-
-class LacrosseSignalDecoder extends SignalDecoder {
-    decodeInternal(signal: BinarySignal) {
-        if (!signal.matchAndStripHeaderFuzzy([0, 0, 0, 0, 1, 0, 1, 0], 2)) {
-            return undefined;
-        }
-
-        const offsetZero = signal.offset;
-        let measuredParityTmp = 0;
-        let measuredChecksumTmp = 0b0000 + 0b1010;
-        signal.readerHook = (bit, offset) => {
-            if (bit) {
-                offset -= offsetZero;
-                measuredParityTmp = 1 - measuredParityTmp;
-                measuredChecksumTmp += 1 << (3 - (offset % 4));
-            }
-        };
-
-        // Relevant for just checksum
-        const sensorType = signal.readNumberMSBFirst(4);
-        const sensorId = signal.readNumberMSBFirst(7).toString();
-        const parity = signal.readBit();
-
-        // Relevant for parity + checksum
-        measuredParityTmp = 0;
-        const tens = signal.readNumberMSBFirst(4);
-        const ones = signal.readNumberMSBFirst(4);
-        const tenths = signal.readNumberMSBFirst(4);
         
-        // Relevant for just checksum
-        const measuredParity = measuredParityTmp;
-        const tens2 = signal.readNumberMSBFirst(4);
-        const ones2 = signal.readNumberMSBFirst(4);
-        
-        // Not relevant for either integrity mechanism
-        signal.readerHook = undefined;
-        const checksum = signal.readNumberMSBFirst(4);
-
-        const measuredChecksum = measuredChecksumTmp & 0b1111;
-
-        if (tens !== tens2 || ones !== ones2 || parity !== measuredParity || checksum !== measuredChecksum) {
-            return undefined;
-        }
-
-        const rawValue = (tens * 10) + ones + (tenths / 10);
-
-        switch (sensorType) {
-            case 0b0000:
-                return new SensorSignal('lacrosse', 'temperature', sensorId, 'C', rawValue - 50.0);
-            case 0b1110:
-                return new SensorSignal('lacrosse', 'humidity', sensorId, '%', rawValue);
-            default:
-                return undefined;
-        }
     }
 
-    getPacketizerClass() {
-        return LacrossePacketizer;
-    }
-}
-
-function loadDecoders(decoders: SignalDecoder[]) {
-    const packetizers = new Map();
-    const decodersByPacketizer = new Map();
-    
-    for (const decoder of decoders) {
+    loadDecoder(decoder: SignalDecoder) {
         const PacketizerClass = decoder.getPacketizerClass();
-    
-        if (!packetizers.has(PacketizerClass)) {
+        
+        if (!this.packetizers.has(PacketizerClass)) {
             const packetizer = new PacketizerClass();
-            packetizers.set(PacketizerClass, packetizer);
-            decodersByPacketizer.set(packetizer, []);
+            this.packetizers.set(PacketizerClass, packetizer);
+            this.decodersByPacketizer.set(packetizer, []);
         }
     
-        decodersByPacketizer.get(packetizers.get(PacketizerClass)).push(decoder);
+        this.decodersByPacketizer.get(this.packetizers.get(PacketizerClass)!)!.push(decoder);
     }
 
-    return decodersByPacketizer;
-}
+    loadDecoders(decoders: SignalDecoder[]) {
+        for (const decoder of decoders) {
+            this.loadDecoder(decoder);
+        }
+    }
 
-const decodersByPacketizer = loadDecoders([new LacrosseSignalDecoder()]);
-
-function processSignalLine(line: string) {
-    const res = [];
-
-    const rawSignal = RawSignal.fromString(line);
-    for (const [packetizer, decoders] of decodersByPacketizer.entries()) {
-        for (const packetizedSignal of packetizer.packetize(rawSignal)) {
-            for (const decoder of decoders) {
-                const signal = decoder.decode(packetizedSignal);
-                if (signal) {
-                    res.push(signal);
+    processSignalLine(line: string) {
+        const res = [];
+    
+        const rawSignal = RawSignal.fromString(line);
+        for (const [packetizer, decoders] of this.decodersByPacketizer.entries()) {
+            for (const packetizedSignal of packetizer.packetize(rawSignal)) {
+                for (const decoder of decoders) {
+                    const signal = decoder.decode(packetizedSignal);
+                    if (signal) {
+                        res.push(signal);
+                    }
                 }
             }
         }
-    }
-
-    return res;
-}
-
-for (const signalStr of signalStrings) {
-    const res = processSignalLine(signalStr);
-    for (const signal of res) {
-        console.log(signal);
+    
+        return res;
     }
 }
+
+function main() {
+    const mainDecoder = new MainDecoder();
+    mainDecoder.loadDecoder(new LacrosseSignalDecoder());
+
+    for (const signalStr of signalStrings) {
+        const res = mainDecoder.processSignalLine(signalStr);
+        for (const signal of res) {
+            console.log(signal);
+        }
+    }
+}
+
+main();
