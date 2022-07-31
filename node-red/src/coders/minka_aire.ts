@@ -1,6 +1,7 @@
 import { Modulation } from "../modulations";
 import { MinkaAirePacketizer } from "../packetizers/minka_aire";
 import { BinarySignal } from "../raw/binary";
+import { NotSupportedException } from "../util";
 import { LoadReturnType, SignalCoder } from "./index";
 
 const COMMANDS: { [key: string]: string } = {
@@ -15,9 +16,13 @@ COMMANDS.light = COMMANDS.light_1;
 
 export class MinkaAireSignalCoder extends SignalCoder {
     encode(signal: any): BinarySignal {
+        if (signal.type !== 'command') {
+            throw new NotSupportedException();
+        }
+
         const bits = [];
-        for (const dip of signal.dip) {
-            bits.push(dip);
+        for (const i of signal.id) {
+            bits.push(i);
         }
         for (const c of COMMANDS[signal.command]) {
             bits.push(c);

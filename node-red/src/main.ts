@@ -65,7 +65,8 @@ function main() {
 
     console.log(mainCoder.createSignalLine({
         coder: 'minka_aire',
-        dip: '00101001',
+        id: '00101001',
+        type: 'command',
         command: 'light',
     }));
 }
