@@ -1,9 +1,10 @@
+import { Modulation } from "../modulations";
 import { LacrossePacketizer } from "../packetizers/lacrosse";
 import { BinarySignal } from "../raw/binary";
 import { SensorSignal } from "../signals/sensor";
-import { LoadReturnType, SignalDecoder } from "./index";
+import { LoadReturnType, SignalCoder } from "./index";
 
-export class LacrosseSignalDecoder extends SignalDecoder {
+export class LacrosseSignalCoder extends SignalCoder {
     decodeInternal(signal: BinarySignal) {
         if (!signal.matchAndStripHeaderFuzzy([0, 0, 0, 0, 1, 0, 1, 0], 2)) {
             return undefined;
@@ -50,9 +51,9 @@ export class LacrosseSignalDecoder extends SignalDecoder {
 
         switch (sensorType) {
             case 0b0000:
-                return new SensorSignal('lacrosse', 'temperature', sensorId, 'C', rawValue - 50.0);
+                return new SensorSignal(this.getName(), "temperature", sensorId, "C", rawValue - 50.0);
             case 0b1110:
-                return new SensorSignal('lacrosse', 'humidity', sensorId, '%', rawValue);
+                return new SensorSignal(this.getName(), "humidity", sensorId, "%", rawValue);
             default:
                 return undefined;
         }
@@ -61,8 +62,20 @@ export class LacrosseSignalDecoder extends SignalDecoder {
     getPacketizerClass() {
         return LacrossePacketizer;
     }
+
+    getName(): string {
+        return "lacrosse";
+    }
+
+    getFrequency(): number {
+        return 433.88;
+    }
+
+    getModulation(): Modulation {
+        return Modulation.ASK_OOK;
+    }
 }
 
 export function load(): LoadReturnType {
-    return [LacrosseSignalDecoder];
+    return [LacrosseSignalCoder];
 }

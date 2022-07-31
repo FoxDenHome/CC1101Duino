@@ -1,48 +1,65 @@
 import { readdirSync } from "fs";
 import { join } from "path";
-import { LoadReturnType, SignalDecoder } from "../decoders/index";
+import { LoadReturnType, SignalCoder } from "../coders/index";
 import { SignalPacketizer } from "../packetizers/index";
 import { Signal } from "../signals";
+import { NotSupportedException } from "../util";
 import { RawSignal } from "./raw";
 
-export class LineDecoder {
+export class LineCoder {
     packetizers: Map<typeof SignalPacketizer, SignalPacketizer> = new Map();
-    decodersByPacketizer: Map<SignalPacketizer, SignalDecoder[]> = new Map();
+    codersByPacketizer: Map<SignalPacketizer, SignalCoder[]> = new Map();
+    coderByName: Map<string, SignalCoder> = new Map();
 
     constructor() {
         
     }
 
-    loadAllDecoders() {
-        const decoderPath = join(__dirname, "../decoders/");
-        for (const decoderFile of readdirSync(decoderPath)) {
-            if (!decoderFile.endsWith('.ts') && !decoderFile.endsWith('.js')) {
+    loadAllCoders() {
+        const coderPath = join(__dirname, "../coders/");
+        for (const coderFile of readdirSync(coderPath)) {
+            if (!coderFile.endsWith(".ts") && !coderFile.endsWith(".js")) {
                 continue;
             }
-            const mod = require(join(decoderPath, decoderFile));
+            const mod = require(join(coderPath, coderFile));
             const loader = mod.load as () => LoadReturnType;
-            for (const DecoderClass of loader()) {
-                this.loadDecoder(new DecoderClass());
+            for (const CoderClass of loader()) {
+                this.loadCoder(new CoderClass());
             }
         }
     }
 
-    loadDecoder(decoder: SignalDecoder) {
-        const PacketizerClass = decoder.getPacketizerClass();
+    loadCoder(coder: SignalCoder) {
+        const PacketizerClass = coder.getPacketizerClass();
         
         if (!this.packetizers.has(PacketizerClass)) {
             const packetizer = new PacketizerClass();
             this.packetizers.set(PacketizerClass, packetizer);
-            this.decodersByPacketizer.set(packetizer, []);
+            this.codersByPacketizer.set(packetizer, []);
         }
     
-        this.decodersByPacketizer.get(this.packetizers.get(PacketizerClass)!)!.push(decoder);
+        this.codersByPacketizer.get(this.packetizers.get(PacketizerClass)!)!.push(coder);
+        this.coderByName.set(coder.getName(), coder);
     }
 
-    loadDecoders(decoders: SignalDecoder[]) {
-        for (const decoder of decoders) {
-            this.loadDecoder(decoder);
+    createSignalLine(signal: any) {
+        if (!signal.coder) {
+            throw new NotSupportedException();
         }
+
+        const coder = this.coderByName.get(signal.coder);
+        if (!coder) {
+            throw new NotSupportedException();
+        }
+
+        const packetizer = this.packetizers.get(coder.getPacketizerClass())!;
+        
+        const binSig = coder.encode(signal);
+        const rawSig = packetizer.pack(binSig);
+        rawSig.frequency = coder.getFrequency();
+        rawSig.modulation = coder.getModulation();
+
+        return rawSig.toCommandString(coder.getRepetitions(), coder.getRepetitionDelay());
     }
 
     processSignalLine(line: string) {
@@ -53,8 +70,17 @@ export class LineDecoder {
             return res;
         }
 
-        for (const [packetizer, decoders] of this.decodersByPacketizer.entries()) {
-            for (const packetizedSignal of packetizer.packetize(rawSignal)) {
+        for (const [packetizer, decoders] of this.codersByPacketizer.entries()) {
+            let packetizedSignals;
+            try {
+                packetizedSignals = packetizer.unpack(rawSignal);
+            } catch (e) {
+                if (e instanceof NotSupportedException) {
+                    continue;
+                }
+                throw e;
+            }
+            for (const packetizedSignal of packetizedSignals) {
                 for (const decoder of decoders) {
                     const signal = decoder.decode(packetizedSignal);
                     if (signal) {

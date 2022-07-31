@@ -1,14 +1,20 @@
+import { Modulation } from "../modulations";
+
 export class RawSignal {
     signalType: string;
     clockIndex: number;
     rssi: number;
     timings: number[];
+    frequency: number;
+    modulation: Modulation;
     uniqueTimings: Set<number>;
 
-    constructor(signalType: string, clockIndex: number, rssi: number, timings: number[]) {
+    constructor(signalType: string, clockIndex: number, timings: number[], modulation: Modulation = Modulation.INVALID, frequency: number = 0, rssi: number = 0) {
         this.signalType = signalType;
         this.clockIndex = clockIndex;
         this.rssi = rssi;
+        this.frequency = frequency;
+        this.modulation = modulation;
         this.uniqueTimings = new Set(timings);
         this.timings = timings;
     }
@@ -61,7 +67,44 @@ export class RawSignal {
             return undefined;
         }
     
-        return new RawSignal(signalType, clockIndex, rssi, timings);
+        return new RawSignal(signalType, clockIndex, timings, Modulation.ASK_OOK, 433.88, rssi);
+    }
+
+    toCommandString(repetitions: number, repetition_delay: number): string {
+        const params: { [key: string]: any } = {
+            F: this.frequency,
+            M: this.modulation,
+            R: repetitions,
+            S: repetition_delay,
+            D: '',
+        };
+
+        const packets = new Map<number, number>();
+
+        for (const delay of this.timings) {
+            let packet = packets.get(delay);
+            if (packet === undefined) {
+                const idx = packets.size;
+                if (idx >= 10) {
+                    throw new Error("More than 10 unique packets");
+                }
+                params[`P${idx}`] = delay;
+                packets.set(delay, idx);
+                packet = idx;
+            }
+            params.D += packet.toString();
+        }
+
+        let payload = '^S;';
+        for (const [key, value] of Object.entries(params)) {
+            if (value === undefined) {
+                continue;
+            }
+            payload += `${key}=${value};`;
+        }
+        payload += '\n';
+
+        return payload;
     }
 
     findClosest(timing: number, tolerance: number = 200) {

@@ -1,4 +1,4 @@
-import { LineDecoder } from "./raw/line";
+import { LineCoder } from "./raw/line";
 
 const signalStrings = `
 ^SMU;P0=19800;P1=-1086;P2=1412;P3=618;P4=-8096;P5=164;P6=-552;D=0121212131213121212121212131313121212121213121312131213121313121213121312131213131213134565;CP=3;R=190;
@@ -53,15 +53,21 @@ const signalStrings = `
 `.trim().split('\n');
 
 function main() {
-    const mainDecoder = new LineDecoder();
-    mainDecoder.loadAllDecoders();
+    const mainCoder = new LineCoder();
+    mainCoder.loadAllCoders();
 
     for (const signalStr of signalStrings) {
-        const res = mainDecoder.processSignalLine(signalStr);
+        const res = mainCoder.processSignalLine(signalStr);
         for (const signal of res) {
             console.log(signal);
         }
     }
+
+    console.log(mainCoder.createSignalLine({
+        coder: 'minka_aire',
+        dip: '00101001',
+        command: 'light',
+    }));
 }
 
 main();

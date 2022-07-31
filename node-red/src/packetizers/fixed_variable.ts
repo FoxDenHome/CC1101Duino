@@ -18,7 +18,7 @@ export class SignalPacketizerFixedVariable extends SignalPacketizer {
         this.onePulse = 0;
     }
 
-    packetize(rawSignal: RawSignal) {
+    unpack(rawSignal: RawSignal) {
         const actualFixedPulse = rawSignal.findClosest(this.fixedPulse, this.tolerance);
         const actualZeroPulse = rawSignal.findClosest(this.zeroPulse, this.tolerance);
         const actualOnePulse = rawSignal.findClosest(this.onePulse, this.tolerance);
@@ -70,5 +70,14 @@ export class SignalPacketizerFixedVariable extends SignalPacketizer {
         }
 
         return signals;
+    }
+
+    pack(signal: BinarySignal) {
+        const timings = [];
+        for (const bit of signal.bits) {
+            timings.push(this.fixedPulse);
+            timings.push(bit ? this.onePulse : this.zeroPulse);
+        }
+        return new RawSignal("MU", 0, timings);
     }
 }

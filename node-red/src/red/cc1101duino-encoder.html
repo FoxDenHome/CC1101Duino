@@ -1,0 +1,26 @@
+<script type="text/javascript">
+    RED.nodes.registerType('cc1101duino-encoder',{
+        category: 'function',
+        color: '#a6bbcf',
+        defaults: {
+            name: {value: ""}
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "file.png",
+        label: function() {
+            return this.name || "cc1101duino-encoder";
+        },
+    });
+</script>
+
+<script type="text/html" data-template-name="cc1101duino-encoder">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+</script>
+
+<script type="text/html" data-help-name="cc1101duino-encoder">
+    <p>A node that takes an object describing a signal and turns it into a command for CC1101Duino</p>
+</script>
