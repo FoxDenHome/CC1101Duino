@@ -1,12 +1,13 @@
 {
   "name": "@doridian/node-red-cc1101duino",
   "private": false,
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "Node-RED node for CC1101duino",
   "main": "dist/main.js",
   "scripts": {
     "build": "rimraf dist && tsc --project . && cp src/red/*.html dist/red/",
-    "start": "npm run build && node ./dist/main.js"
+    "start": "npm run build && node ./dist/main.js",
+    "prepare": "npm run build"
   },
   "author": "Doridian",
   "license": "GPL-3.0-or-later",
