@@ -128,14 +128,15 @@ void initRxSystem() {
 }
 
 static void refreshRxConfig() {
-  if (!in_rx) {
-    return;
-  }
   if (rx_freq < 1 || rx_freq > 1000) {
     rx_freq = DEFAULT_FREQUENCY;
   }
   if (rx_mod > 4) {
     rx_mod = DEFAULT_MODULATION;
+  }
+
+  if (!in_rx) {
+    return;
   }
   cc1101.endTransmission();
   CC1101_MAIN.setMHZ(rx_freq);
@@ -177,12 +178,12 @@ void endTransmission() {
 
 void setRxFrequency(float freq) {
   rx_freq = freq;
-  EEPROM.put(EEPROM_FREQUENCY, freq);
   refreshRxConfig();
+  EEPROM.put(EEPROM_FREQUENCY, freq);
 }
 
 void setRxModulation(byte mod) {
   rx_mod = mod;
-  EEPROM.write(EEPROM_MODULATION, mod);
   refreshRxConfig();
+  EEPROM.write(EEPROM_MODULATION, mod);
 }
