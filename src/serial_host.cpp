@@ -148,6 +148,12 @@ void HostSerial::handle() {
         return;
       }
     }
+    case 'F': // Set RX freq
+      setRxFrequency(this->buffer.toFloat());
+      break;
+    case 'M': // Set RX modulation
+      setRxModulation(this->buffer.toInt());
+      break;
     case '$':
     case '>': {
       break;

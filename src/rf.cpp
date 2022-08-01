@@ -1,5 +1,6 @@
 #include "rf.h"
 
+#include <EEPROM.h>
 #include <Arduino.h>
 #include <TimerOne.h>
 #include "SimpleFIFO.h"
@@ -8,15 +9,20 @@
 #include "cc1101.h"
 #include "serial_host.h"
 
+#define EEPROM_MODULATION 1
+#define EEPROM_FREQUENCY 2
+
 #define FIFO_LENGTH 90    // 150
 #define minPulse    90
 #define PIN_RX      PIN_GDO2
 
-SignalDetectorClass signalDecoder;
-SimpleFIFO<int,FIFO_LENGTH> fifo; //store FIFO_LENGTH # ints
+static SignalDetectorClass signalDecoder;
+static SimpleFIFO<int,FIFO_LENGTH> fifo; //store FIFO_LENGTH # ints
 
-const float rx_freq = DEFAULT_FREQUENCY;
-const int rx_mod = DEFAULT_MODULATION;
+float rx_freq = DEFAULT_FREQUENCY;
+int rx_mod = DEFAULT_MODULATION;
+
+bool in_rx;
 
 static uint8_t rssiCallback() {
   cc1101.select();
@@ -101,6 +107,14 @@ static size_t writeCallback(const uint8_t *buf, uint8_t len) {
 }
 
 void initRxSystem() {
+  EEPROM.begin();
+
+  rx_mod = EEPROM.read(EEPROM_MODULATION);
+  EEPROM.get(EEPROM_FREQUENCY, rx_freq);
+  hostSerial.echoFirst(F("RX initialized F="));
+  hostSerial.sendNext(String(rx_freq));
+  hostSerial.sendNext(F(";M="));
+  hostSerial.sendEnd(String(rx_mod));
   Timer1.initialize(maxPulse);
   Timer1.attachInterrupt(timer1RxSystem);
 
@@ -113,7 +127,28 @@ void initRxSystem() {
   endTransmission();
 }
 
+static void refreshRxConfig() {
+  if (!in_rx) {
+    return;
+  }
+  if (rx_freq <= 1) {
+    rx_freq = DEFAULT_FREQUENCY;
+  }
+  if (rx_mod > 4) {
+    rx_mod = DEFAULT_MODULATION;
+  }
+  cc1101.endTransmission();
+  CC1101_MAIN.setMHZ(rx_freq);
+  CC1101_MAIN.setModulation(rx_mod);
+  cc1101.endTransmission();
+}
+
 void beginTransmission(float tx_freq, byte tx_mod) {
+  if (!in_rx) {
+    return;
+  }
+  in_rx = false;
+
   cli();
   detachInterrupt(digitalPinToInterrupt(PIN_GDO2));
   signalDecoder.reset();
@@ -126,14 +161,28 @@ void beginTransmission(float tx_freq, byte tx_mod) {
 }
 
 void endTransmission() {
-  cc1101.endTransmission();
-  CC1101_MAIN.setMHZ(rx_freq);
-  CC1101_MAIN.setModulation(rx_mod);
-  cc1101.endTransmission();
+  if (in_rx) {
+    return;
+  }
+  in_rx = true;
+
+  refreshRxConfig();
 
   cli();
   signalDecoder.reset();
   fifo.flush();
   attachInterrupt(digitalPinToInterrupt(PIN_GDO2), handleRxInterrupt, CHANGE);
   sei();
+}
+
+void setRxFrequency(float freq) {
+  rx_freq = freq;
+  EEPROM.put(EEPROM_FREQUENCY, freq);
+  refreshRxConfig();
+}
+
+void setRxModulation(byte mod) {
+  rx_mod = mod;
+  EEPROM.write(EEPROM_MODULATION, mod);
+  refreshRxConfig();
 }
