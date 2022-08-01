@@ -131,7 +131,7 @@ static void refreshRxConfig() {
   if (!in_rx) {
     return;
   }
-  if (rx_freq <= 1) {
+  if (rx_freq < 1 || rx_freq > 1000) {
     rx_freq = DEFAULT_FREQUENCY;
   }
   if (rx_mod > 4) {
