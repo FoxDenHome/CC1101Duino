@@ -141,28 +141,29 @@ void HostSerial::handle() {
 
   cc1101.select();
 
+  bool isOk = true;
+
   switch (this->command) {
-    case 'S': { // Transmit data, same format as SIGNALDuino raw ( https://github.com/RFD-FHEM/SIGNALDuino/wiki/Commands#sendraw--sr ), plus F=frequency, M=modulation, S=repeat spacing
-      if (!transmitData(this->buffer)) {
-        this->reply(F("BAD Invalid parameters"));
-        return;
-      }
-    }
+    case 'S':// Transmit data, same format as SIGNALDuino raw ( https://github.com/RFD-FHEM/SIGNALDuino/wiki/Commands#sendraw--sr ), plus F=frequency, M=modulation, S=repeat spacing
+      isOk = transmitData(this->buffer);
+      break;
     case 'F': // Set RX freq
-      setRxFrequency(this->buffer.toFloat());
+      isOk = setRxFrequency(this->buffer.toFloat());
       break;
     case 'M': // Set RX modulation
-      setRxModulation(this->buffer.toInt());
+      isOk = setRxModulation(this->buffer.toInt());
       break;
     case '$':
-    case '>': {
-      break;
-    }
-    default: {
+    case '>':
+      return;
+    default:
       this->reply(F("BAD Unknown command"));
       return;
-    }
   }
 
-  this->reply(F("OK Done"));
+  if (isOk) {
+    this->reply(F("OK Done"));
+  } else {
+    this->reply(F("BAD Invalid parameters"));
+  }
 }

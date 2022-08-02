@@ -22,11 +22,31 @@ static SimpleFIFO<int,FIFO_LENGTH> fifo; //store FIFO_LENGTH # ints
 float rx_freq = DEFAULT_FREQUENCY;
 int rx_mod = DEFAULT_MODULATION;
 
-bool in_rx;
+bool in_rx = false;
 
 static uint8_t rssiCallback() {
   cc1101.select();
   return CC1101_MAIN.getRssi();
+}
+
+static bool validFrequency(float mhz) {
+  if (mhz >= 300 && mhz <= 348) {
+    return true;
+  }
+
+  if (mhz >= 387 && mhz <= 464) {
+    return true;
+  }
+
+  if (mhz >= 779 && mhz <= 928) {
+    return true;
+  }
+
+  return false;
+}
+
+static bool validModulation(byte mod) {
+  return mod <= 4;
 }
 
 // handleRxInterrupt, timer1RxSystem and loopRxtiming come from SIGNALDuino
@@ -111,6 +131,12 @@ void initRxSystem() {
 
   rx_mod = EEPROM.read(EEPROM_MODULATION);
   EEPROM.get(EEPROM_FREQUENCY, rx_freq);
+
+  if (!validModulation(rx_mod) || !validFrequency(rx_freq)) {
+    setRxFrequency(DEFAULT_FREQUENCY);
+    setRxModulation(DEFAULT_MODULATION);
+  }
+
   hostSerial.echoFirst(F("RX initialized F="));
   hostSerial.sendNext(String(rx_freq));
   hostSerial.sendNext(F(";M="));
@@ -124,20 +150,17 @@ void initRxSystem() {
   signalDecoder.MCenabled = true;
   signalDecoder.MSenabled = true;
   signalDecoder.MUenabled = true;
+
+  // Begin RX phase
   endTransmission();
 }
 
+// 300-348, 387-464, 779-928
 static void refreshRxConfig() {
-  if (rx_freq < 1 || rx_freq > 1000) {
-    rx_freq = DEFAULT_FREQUENCY;
-  }
-  if (rx_mod > 4) {
-    rx_mod = DEFAULT_MODULATION;
-  }
-
   if (!in_rx) {
     return;
   }
+
   cc1101.endTransmission();
   CC1101_MAIN.setMHZ(rx_freq);
   CC1101_MAIN.setModulation(rx_mod);
@@ -176,14 +199,22 @@ void endTransmission() {
   sei();
 }
 
-void setRxFrequency(float freq) {
+bool setRxFrequency(float freq) {
+  if (!validFrequency(freq)) {
+    return false;
+  }
   rx_freq = freq;
-  refreshRxConfig();
   EEPROM.put(EEPROM_FREQUENCY, freq);
+  refreshRxConfig();
+  return true;
 }
 
-void setRxModulation(byte mod) {
+bool setRxModulation(byte mod) {
+  if (!validModulation(mod)) {
+    return false;
+  }
   rx_mod = mod;
-  refreshRxConfig();
   EEPROM.write(EEPROM_MODULATION, mod);
+  refreshRxConfig();
+  return true;
 }

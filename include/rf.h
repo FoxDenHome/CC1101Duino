@@ -8,5 +8,5 @@ void endTransmission();
 
 void initRxSystem();
 void loopRxSystem();
-void setRxFrequency(float freq);
-void setRxModulation(byte mod);
+bool setRxFrequency(float freq);
+bool setRxModulation(byte mod);
