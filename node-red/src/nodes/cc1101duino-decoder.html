@@ -6,7 +6,7 @@
             name: {value: ""}
         },
         inputs: 1,
-        outputs: 1,
+        outputs: 2,
         icon: "file.png",
         label: function() {
             return this.name || "CC1101Duino Decoder";
@@ -23,4 +23,6 @@
 
 <script type="text/html" data-help-name="cc1101duino-decoder">
     <p>A node that takes one line at a time signals from CC1101Duino and outputs decoded signals</p>
+    <p>First output is decoded signals</p>
+    <p>Second output is for incoming signals that had no decodable signal</p>
 </script>

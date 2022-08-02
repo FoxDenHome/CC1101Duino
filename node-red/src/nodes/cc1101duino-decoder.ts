@@ -5,11 +5,18 @@ export default function (RED: any) {
         const node = this;
         RED.nodes.createNode(node, config);
         node.on("input", function(msg: any) {
-            for (const signal of coder.processSignalLine(msg.payload)) {
-                node.send({
+            const signals = coder.processSignalLine(msg.payload);
+
+            if (signals.length < 1) {
+                node.send([null, msg]);
+                return;
+            }
+
+            for (const signal of signals) {
+                node.send([{
                     ...msg,
                     payload: signal,
-                });
+                }, null]);
             }
         });
     }
