@@ -121,7 +121,10 @@ static bool transmitData(const String& buffer) {
     }
   }
 
-  beginTransmission(frequency, modulation);
+  if (!beginTransmission(frequency, modulation)) {
+    return false;
+  }
+
   for (byte i = 0; i < repeats; i++) {
     for (offset = 0; offset < data_length; offset++) {
       const byte d = data[offset];

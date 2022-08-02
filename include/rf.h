@@ -3,8 +3,11 @@
 #include <Arduino.h>
 #include "signalDecoder.h"
 
-void beginTransmission(float tx_freq, byte tx_mod);
+bool beginTransmission(float tx_freq, byte tx_mod);
 void endTransmission();
+
+bool validFrequency(float mhz);
+bool validModulation(byte mod);
 
 void initRxSystem();
 void loopRxSystem();

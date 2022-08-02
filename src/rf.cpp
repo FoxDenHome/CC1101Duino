@@ -29,7 +29,7 @@ static uint8_t rssiCallback() {
   return CC1101_MAIN.getRssi();
 }
 
-static bool validFrequency(float mhz) {
+bool validFrequency(float mhz) {
   if (mhz >= 300 && mhz <= 348) {
     return true;
   }
@@ -45,7 +45,7 @@ static bool validFrequency(float mhz) {
   return false;
 }
 
-static bool validModulation(byte mod) {
+bool validModulation(byte mod) {
   return mod <= 4;
 }
 
@@ -167,9 +167,13 @@ static void refreshRxConfig() {
   cc1101.endTransmission();
 }
 
-void beginTransmission(float tx_freq, byte tx_mod) {
+bool beginTransmission(float tx_freq, byte tx_mod) {
+  if (!validFrequency(tx_freq) || !validModulation(tx_mod)) {
+    return false;
+  }
+
   if (!in_rx) {
-    return;
+    return false;
   }
   in_rx = false;
 
@@ -182,6 +186,8 @@ void beginTransmission(float tx_freq, byte tx_mod) {
   CC1101_MAIN.setMHZ(tx_freq);
   CC1101_MAIN.setModulation(tx_mod);
   cc1101.beginTransmission();
+
+  return true;
 }
 
 void endTransmission() {
