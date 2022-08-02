@@ -178,6 +178,7 @@ bool beginTransmission(float tx_freq, byte tx_mod) {
   in_rx = false;
 
   cli();
+  Timer1.stop();
   detachInterrupt(digitalPinToInterrupt(PIN_GDO2));
   signalDecoder.reset();
   fifo.flush();
@@ -199,6 +200,7 @@ void endTransmission() {
   refreshRxConfig();
 
   cli();
+  Timer1.start();
   signalDecoder.reset();
   fifo.flush();
   attachInterrupt(digitalPinToInterrupt(PIN_GDO2), handleRxInterrupt, CHANGE);
