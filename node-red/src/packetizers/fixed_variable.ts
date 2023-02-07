@@ -1,20 +1,20 @@
 import { BinarySignal } from "../raw/binary";
 import { RawSignal } from "../raw/raw";
-import { PulseDefinition, PULSE_ZERO } from "../util";
+import { NumberRange, NUMER_RANGE_ZERO } from "../util";
 import { SignalPacketizer } from "./index";
 
 export class SignalPacketizerFixedVariable extends SignalPacketizer {
     minLen: number;
-    fixedPulse: PulseDefinition;
-    zeroPulse: PulseDefinition;
-    onePulse: PulseDefinition;
+    fixedPulse: NumberRange;
+    zeroPulse: NumberRange;
+    onePulse: NumberRange;
 
     constructor() {
         super();
         this.minLen = 5;
-        this.fixedPulse = PULSE_ZERO;
-        this.zeroPulse = PULSE_ZERO;
-        this.onePulse = PULSE_ZERO;
+        this.fixedPulse = NUMER_RANGE_ZERO;
+        this.zeroPulse = NUMER_RANGE_ZERO;
+        this.onePulse = NUMER_RANGE_ZERO;
     }
 
     unpack(rawSignal: RawSignal) {
@@ -74,8 +74,8 @@ export class SignalPacketizerFixedVariable extends SignalPacketizer {
     pack(signal: BinarySignal) {
         const timings = [];
         for (const bit of signal.bits) {
-            timings.push(this.fixedPulse.length);
-            timings.push(bit ? this.onePulse.length : this.zeroPulse.length);
+            timings.push(this.fixedPulse.value);
+            timings.push(bit ? this.onePulse.value : this.zeroPulse.value);
         }
         return new RawSignal("MU", 0, timings);
     }

@@ -1,7 +1,7 @@
 import { Modulation } from "../modulations";
 import { MinkaAirePacketizer } from "../packetizers/minka_aire";
 import { BinarySignal } from "../raw/binary";
-import { NotSupportedException } from "../util";
+import { NotSupportedException, NumberRange } from "../util";
 import { LoadReturnType, SignalCoder } from "./index";
 
 const COMMANDS: { [key: string]: string } = {
@@ -53,8 +53,8 @@ export class MinkaAireSignalCoder extends SignalCoder {
         return "minka_aire";
     }
 
-    getFrequency(): number {
-        return 304.2;
+    getFrequency(): NumberRange {
+        return { value: 304.2, tolerance: 1.0 };
     }
 
     getModulation(): Modulation {

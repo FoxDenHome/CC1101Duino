@@ -1,6 +1,7 @@
 import { Modulation } from "../modulations";
 import { LacrossePacketizer } from "../packetizers/lacrosse";
 import { BinarySignal } from "../raw/binary";
+import { NumberRange } from "../util";
 import { LoadReturnType, SignalCoder } from "./index";
 
 export class LacrosseSignalCoder extends SignalCoder {
@@ -77,8 +78,8 @@ export class LacrosseSignalCoder extends SignalCoder {
         return "lacrosse";
     }
 
-    getFrequency(): number {
-        return 433.88;
+    getFrequency(): NumberRange {
+        return { value: 433.88, tolerance: 1.0 };
     }
 
     getModulation(): Modulation {

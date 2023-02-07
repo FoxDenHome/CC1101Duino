@@ -2,7 +2,7 @@ import { Modulation } from "../modulations";
 import { SignalPacketizer } from "../packetizers/index";
 import { BinarySignal } from "../raw/binary";
 import { EndOfSignalError } from "../raw/index";
-import { NotSupportedException } from "../util";
+import { NotSupportedException, NumberRange } from "../util";
 
 export type LoadReturnType = { new(): SignalCoder }[];
 
@@ -30,7 +30,7 @@ export abstract class SignalCoder {
 
     abstract getName(): string;
 
-    abstract getFrequency(): number;
+    abstract getFrequency(): NumberRange;
 
     abstract getModulation(): Modulation;
 
@@ -40,10 +40,6 @@ export abstract class SignalCoder {
 
     getRepetitionDelay(): number {
         return 10000;
-    }
-
-    getFrequencyTolerance(): number {
-        return 1.0;
     }
 }
 

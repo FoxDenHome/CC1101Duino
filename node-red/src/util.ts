@@ -1,11 +1,11 @@
 export class NotSupportedException extends Error { }
 
-export interface PulseDefinition {
-    length: number;
+export interface NumberRange {
+    value: number;
     tolerance: number;
 }
 
-export const PULSE_ZERO = {
-    length: 0,
+export const NUMER_RANGE_ZERO: NumberRange = {
+    value: 0,
     tolerance: 0,
 };

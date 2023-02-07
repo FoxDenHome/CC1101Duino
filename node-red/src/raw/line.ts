@@ -52,7 +52,7 @@ export class LineCoder {
         
         const binSig = coder.encode(signal);
         const rawSig = packetizer.pack(binSig);
-        rawSig.frequency = coder.getFrequency();
+        rawSig.frequency = coder.getFrequency().value;
         rawSig.modulation = coder.getModulation();
 
         return rawSig.toCommandString(coder.getRepetitions(), coder.getRepetitionDelay());
@@ -69,7 +69,8 @@ export class LineCoder {
         const packetizerResults = new Map<typeof SignalPacketizer, BinarySignal[]>();
 
         for (const coder of this.coderByName.values()) {
-            if (Math.abs(rawSignal.frequency - coder.getFrequency()) > coder.getFrequencyTolerance()) {
+            const coderFreq = coder.getFrequency();
+            if (Math.abs(rawSignal.frequency - coderFreq.value) > coderFreq.tolerance) {
                 continue;
             }
 
