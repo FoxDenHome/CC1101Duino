@@ -1,23 +1,22 @@
 import { BinarySignal } from "../raw/binary";
 import { RawSignal } from "../raw/raw";
+import { PulseDefinition, PULSE_ZERO } from "../util";
 import { SignalPacketizer } from "./index";
 
 export class SignalPacketizerFixed extends SignalPacketizer {
-    tolerance: number;
     minLen: number;
-    pulseLen: number;
+    pulse: PulseDefinition;
     maxConsecutivePulse: number;
 
     constructor() {
         super();
-        this.tolerance = 200;
+        this.pulse = PULSE_ZERO;
         this.minLen = 5;
-        this.pulseLen = 0;
         this.maxConsecutivePulse = 3;
     }
 
     unpack(rawSignal: RawSignal): BinarySignal[] {
-        const actualAbsPulseLen = rawSignal.findClosestAbs(this.pulseLen, this.tolerance);
+        const actualAbsPulseLen = rawSignal.findClosestAbs(this.pulse);
 
         if (!actualAbsPulseLen) {
             return [];
@@ -52,7 +51,7 @@ export class SignalPacketizerFixed extends SignalPacketizer {
     pack(signal: BinarySignal) {
         const timings = [];
         for (const bit of signal.bits) {
-            timings.push(bit ? this.pulseLen : -this.pulseLen);
+            timings.push(bit ? this.pulse.length : -this.pulse.length);
         }
         return new RawSignal("MU", 0, timings);
     }
