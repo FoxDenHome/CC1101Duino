@@ -1,27 +1,26 @@
 import { BinarySignal } from "../raw/binary";
 import { RawSignal } from "../raw/raw";
+import { PulseDefinition, PULSE_ZERO } from "../util";
 import { SignalPacketizer } from "./index";
 
 export class SignalPacketizerFixedVariable extends SignalPacketizer {
-    tolerance: number;
     minLen: number;
-    fixedPulse: number;
-    zeroPulse: number;
-    onePulse: number;
+    fixedPulse: PulseDefinition;
+    zeroPulse: PulseDefinition;
+    onePulse: PulseDefinition;
 
     constructor() {
         super();
-        this.tolerance = 200;
         this.minLen = 5;
-        this.fixedPulse = 0;
-        this.zeroPulse = 0;
-        this.onePulse = 0;
+        this.fixedPulse = PULSE_ZERO;
+        this.zeroPulse = PULSE_ZERO;
+        this.onePulse = PULSE_ZERO;
     }
 
     unpack(rawSignal: RawSignal) {
-        const actualFixedPulse = rawSignal.findClosest(this.fixedPulse, this.tolerance);
-        const actualZeroPulse = rawSignal.findClosest(this.zeroPulse, this.tolerance);
-        const actualOnePulse = rawSignal.findClosest(this.onePulse, this.tolerance);
+        const actualFixedPulse = rawSignal.findClosest(this.fixedPulse);
+        const actualZeroPulse = rawSignal.findClosest(this.zeroPulse);
+        const actualOnePulse = rawSignal.findClosest(this.onePulse);
 
         if (!actualFixedPulse || !actualZeroPulse || !actualOnePulse) {
             return [];
@@ -75,8 +74,8 @@ export class SignalPacketizerFixedVariable extends SignalPacketizer {
     pack(signal: BinarySignal) {
         const timings = [];
         for (const bit of signal.bits) {
-            timings.push(this.fixedPulse);
-            timings.push(bit ? this.onePulse : this.zeroPulse);
+            timings.push(this.fixedPulse.length);
+            timings.push(bit ? this.onePulse.length : this.zeroPulse.length);
         }
         return new RawSignal("MU", 0, timings);
     }

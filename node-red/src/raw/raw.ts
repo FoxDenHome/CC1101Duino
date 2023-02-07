@@ -1,4 +1,5 @@
 import { Modulation } from "../modulations";
+import { PulseDefinition } from "../util";
 
 export class RawSignal {
     signalType: string;
@@ -122,11 +123,11 @@ export class RawSignal {
         return payload;
     }
 
-    findClosest(timing: number, tolerance: number = 200, ignoreSign: boolean = false) {
+    findClosest(pulse: PulseDefinition, ignoreSign: boolean = false) {
         let bestTimingDist, bestTiming;
         
-        const timingSign = Math.sign(timing);
-        const timingAbs = Math.abs(timing);
+        const timingSign = Math.sign(pulse.length);
+        const timingAbs = Math.abs(pulse.length);
 
         for (const haveTiming of this.uniqueTimings) {
             // We never want to turn a low pulse into a high pulse, unless requested
@@ -135,7 +136,7 @@ export class RawSignal {
             }
 
             const timingDist = Math.abs(timingAbs - Math.abs(haveTiming));
-            if (timingDist > tolerance) {
+            if (timingDist > pulse.tolerance) {
                 continue;
             }
 
@@ -148,8 +149,8 @@ export class RawSignal {
         return bestTiming;
     }
 
-    findClosestAbs(timing: number, tolerance: number = 200) {
-        const actualTiming = this.findClosest(timing, tolerance, true);
+    findClosestAbs(pulse: PulseDefinition) {
+        const actualTiming = this.findClosest(pulse, true);
         if (actualTiming) {
             return Math.abs(actualTiming);
         }
