@@ -12,7 +12,7 @@
   "author": "Doridian",
   "license": "GPL-3.0-or-later",
   "devDependencies": {
-    "@types/node": "18.17.16",
+    "@types/node": "18.17.17",
     "rimraf": "5.0.1",
     "typescript": "5.2.2"
   },
