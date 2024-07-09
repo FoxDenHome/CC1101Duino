@@ -13,7 +13,7 @@
   "license": "GPL-3.0-or-later",
   "devDependencies": {
     "@types/node": "20.14.10",
-    "rimraf": "5.0.8",
+    "rimraf": "6.0.0",
     "typescript": "5.5.3"
   },
   "node-red": {
