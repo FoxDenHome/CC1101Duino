@@ -4,10 +4,10 @@
   "codeowners": ["@Doridian"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/Doridian/CC1101Duino",
+  "documentation": "https://github.com/FoxDenHome/CC1101Duino",
   "integration_type": "hub",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/Doridian/CC1101Duino/issues",
+  "issue_tracker": "https://github.com/FoxDenHome/CC1101Duino/issues",
   "loggers": ["serial_asyncio_fast"],
   "requirements": ["pyserial-asyncio-fast>=0.16"],
   "version": "2.0.0"
