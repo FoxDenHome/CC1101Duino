@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to CC1101Duino",
+        "data": {
+          "device": "Serial port",
+          "automatic_add": "Automatically add new sensors"
+        },
+        "data_description": {
+          "device": "Local serial port, or a pyserial URL such as socket://host:port for ser2net",
+          "automatic_add": "Create entities for every sensor that is heard, including your neighbours'"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to open the serial port"
+    },
+    "abort": {
+      "already_configured": "This serial port is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "automatic_add": "Automatically add new sensors"
+        }
+      }
+    }
+  },
+  "services": {
+    "send_signal": {
+      "name": "Send signal",
+      "description": "Encode a signal with one of the supported protocols and transmit it.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Device",
+          "description": "CC1101Duino to transmit with. Only needed if more than one is set up."
+        },
+        "coder": {
+          "name": "Protocol",
+          "description": "Protocol to encode the signal with."
+        },
+        "id": {
+          "name": "Remote ID",
+          "description": "Remote ID, as reported in cc1101duino_signal events (8 bits for minka_aire)."
+        },
+        "command": {
+          "name": "Command",
+          "description": "Command to send."
+        }
+      }
+    },
+    "send_raw": {
+      "name": "Send raw command",
+      "description": "Send a raw command line to the CC1101Duino firmware.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Device",
+          "description": "CC1101Duino to send to. Only needed if more than one is set up."
+        },
+        "line": {
+          "name": "Command",
+          "description": "Command line without the leading ^, e.g. F433.92 to change the receive frequency."
+        }
+      }
+    }
+  }
+}

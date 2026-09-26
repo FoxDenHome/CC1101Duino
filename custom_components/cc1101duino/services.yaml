@@ -1,0 +1,40 @@
+send_signal:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: cc1101duino
+    coder:
+      required: true
+      example: minka_aire
+      selector:
+        select:
+          options:
+            - minka_aire
+    id:
+      example: "00101001"
+      selector:
+        text:
+    command:
+      example: light
+      selector:
+        select:
+          options:
+            - "off"
+            - low
+            - medium
+            - high
+            - light
+            - light_1
+            - light_2
+send_raw:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: cc1101duino
+    line:
+      required: true
+      example: "F433.92"
+      selector:
+        text:

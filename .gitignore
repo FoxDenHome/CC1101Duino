@@ -4,5 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 .DS_Store
-node_modules
-dist
+__pycache__
+.pytest_cache
+.ruff_cache
+.venv
