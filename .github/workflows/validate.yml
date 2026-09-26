@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uvx ruff check custom_components tests
       - run: uvx ruff format --check custom_components tests
       - run: uv run --python 3.13 --with-requirements requirements_test.txt pytest
