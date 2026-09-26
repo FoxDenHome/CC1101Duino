@@ -23,7 +23,7 @@ from .const import (
 from .hub import CC1101DuinoHub
 from .protocol.signalduino import load_protocols
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.UPDATE]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -100,7 +100,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CC1101DuinoConfigEntry) 
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    entry.async_create_background_task(hass, hub.async_run(), f"{DOMAIN} {hub.device}")
+    hub.start()
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True

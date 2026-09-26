@@ -6,6 +6,7 @@
 #include "serial_host.h"
 #include "utils.h"
 #include "rf.h"
+#include "version.h"
 
 HostSerial hostSerial(Serial);
 
@@ -156,6 +157,9 @@ void HostSerial::handle() {
     case 'M': // Set RX modulation
       isOk = setRxModulation(this->buffer.toInt());
       break;
+    case 'V': // Firmware version
+      this->reply(F("OK " FIRMWARE_VERSION));
+      return;
     case '$':
     case '>':
       return;

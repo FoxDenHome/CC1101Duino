@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.components.update import UpdateEntityFeature
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_DEVICE, STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
@@ -14,6 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 
 from custom_components.cc1101duino.config_flow import _list_ports
 from custom_components.cc1101duino.const import CONF_AUTOMATIC_ADD, DOMAIN, EVENT_SIGNAL
+from custom_components.cc1101duino.firmware import FlashError, load_firmware
 
 LACROSSE_TEMP = "^SMU;P0=19800;P1=-1086;P2=1412;P3=618;P4=-8096;P5=164;P6=-552;D=0121212131213121212121212131313121212121213121312131213121313121213121312131213131213134565;CP=3;R=190;F=433.88;M=2;"
 NOISE = "^SMU;P0=-188;P1=-921;P2=739;P3=268;P4=-406;P5=566;P6=-299;P7=350;D=12121213434563434343434343434347656505034745;CP=3;R=186;F=433.88;M=2;"
@@ -46,9 +48,13 @@ class FakeSerial:
 @pytest.fixture
 def fake_serial():
     fake = FakeSerial()
-    with patch(
-        "custom_components.cc1101duino.hub.async_open",
-        AsyncMock(return_value=(fake.reader, fake.writer)),
+    with (
+        patch(
+            "custom_components.cc1101duino.hub.async_open",
+            AsyncMock(return_value=(fake.reader, fake.writer)),
+        ),
+        # Tests that want the version queried lower this
+        patch("custom_components.cc1101duino.hub.VERSION_QUERY_DELAY", 3600),
     ):
         yield fake
 
@@ -68,8 +74,10 @@ def hub_entity(hass: HomeAssistant, entry: MockConfigEntry, domain: str, key: st
     return entity_id
 
 
-async def setup_entry(hass: HomeAssistant, **options) -> MockConfigEntry:
-    entry = MockConfigEntry(domain=DOMAIN, data={CONF_DEVICE: "/dev/ttyFAKE"}, options=options)
+async def setup_entry(
+    hass: HomeAssistant, device: str = "/dev/ttyFAKE", **options
+) -> MockConfigEntry:
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_DEVICE: device}, options=options)
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
@@ -403,3 +411,88 @@ async def test_reconfigure(hass: HomeAssistant, fake_serial: FakeSerial, mock_po
     assert entry.unique_id == BY_ID
     assert entry.title == BY_ID
     assert entry.state is ConfigEntryState.LOADED
+
+
+async def test_firmware_version_from_ready_message(
+    hass: HomeAssistant, fake_serial: FakeSerial
+) -> None:
+    entry = await setup_entry(hass)
+    update = hub_entity(hass, entry, "update", "firmware")
+    bundled = load_firmware().version
+
+    state = hass.states.get(update)
+    assert state.state == "unknown"
+    assert state.attributes["latest_version"] == bundled
+    assert state.attributes["supported_features"] & UpdateEntityFeature.INSTALL
+
+    fake_serial.feed(f"^<CC1101Duino ready V={bundled};R=0")
+    await hass.async_block_till_done()
+    state = hass.states.get(update)
+    assert state.state == STATE_OFF
+    assert state.attributes["installed_version"] == bundled
+
+    # Firmware from before versions
+    fake_serial.feed("^<CC1101Duino ready 0")
+    await hass.async_block_till_done()
+    state = hass.states.get(update)
+    assert state.state == STATE_ON
+    assert state.attributes["installed_version"] == "0"
+
+
+@pytest.mark.parametrize(("reply", "version"), [("^$VOK 7", "7"), ("^$VBAD Unknown command", "0")])
+async def test_firmware_version_query(
+    hass: HomeAssistant, fake_serial: FakeSerial, reply: str, version: str
+) -> None:
+    fake_serial.reply = reply
+    with patch("custom_components.cc1101duino.hub.VERSION_QUERY_DELAY", 0):
+        entry = await setup_entry(hass, device="socket://host:2000")
+        await asyncio.sleep(0.01)
+        await hass.async_block_till_done()
+
+    assert fake_serial.written == ["^V\n"]
+    state = hass.states.get(hub_entity(hass, entry, "update", "firmware"))
+    assert state.attributes["installed_version"] == version
+    # Over ser2net the bootloader cannot be started
+    assert not state.attributes["supported_features"] & UpdateEntityFeature.INSTALL
+
+
+async def test_firmware_install(hass: HomeAssistant, fake_serial: FakeSerial) -> None:
+    entry = await setup_entry(hass)
+    update = hub_entity(hass, entry, "update", "firmware")
+    fake_serial.feed("^<CC1101Duino ready 0")
+    await hass.async_block_till_done()
+
+    flashed = []
+
+    def flash(device, image, progress) -> None:
+        progress(50)
+        flashed.append((device, image))
+
+    with patch("custom_components.cc1101duino.hub.flash", flash):
+        await hass.services.async_call("update", "install", {"entity_id": update}, blocking=True)
+    await hass.async_block_till_done()
+    assert flashed == [("/dev/ttyFAKE", load_firmware().image)]
+
+    # Reconnected, and waiting for the new firmware to report its version
+    assert hass.states.get(hub_entity(hass, entry, "binary_sensor", "connected")).state == STATE_ON
+    state = hass.states.get(update)
+    assert state.attributes["in_progress"] is False
+    assert state.attributes["installed_version"] is None
+
+    fake_serial.feed(f"^<CC1101Duino ready V={load_firmware().version};R=0")
+    await hass.async_block_till_done()
+    assert hass.states.get(update).state == STATE_OFF
+
+    fake_serial.feed("^<CC1101Duino ready 0")
+    await hass.async_block_till_done()
+
+    def broken_flash(device, image, progress) -> None:
+        raise FlashError("No response from the bootloader")
+
+    with (
+        patch("custom_components.cc1101duino.hub.flash", broken_flash),
+        pytest.raises(HomeAssistantError, match="No response from the bootloader"),
+    ):
+        await hass.services.async_call("update", "install", {"entity_id": update}, blocking=True)
+    await hass.async_block_till_done()
+    assert hass.states.get(hub_entity(hass, entry, "binary_sensor", "connected")).state == STATE_ON

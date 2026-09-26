@@ -5,6 +5,7 @@
 #include "cc1101.h"
 #include "serial_host.h"
 #include "rf.h"
+#include "version.h"
 
 void setup() {
   const uint8_t mcusr_mirror = MCUSR;
@@ -16,7 +17,8 @@ void setup() {
 
   initRxSystem();
 
-  hostSerial.echoFirst(F("CC1101Duino ready "));
+  // Home Assistant reads the version of its bundled firmware from this string in the hex file
+  hostSerial.echoFirst(F("CC1101Duino ready V=" FIRMWARE_VERSION ";R="));
   hostSerial.sendEnd(String(mcusr_mirror));
   wdt_enable(WDTO_2S);
 }

@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -21,12 +22,17 @@ from .const import (
     AUTOCREATE_WINDOW,
     BAUDRATE,
     COMMAND_TIMEOUT,
+    DOMAIN,
     EVENT_SIGNAL,
+    LEGACY_FIRMWARE_VERSION,
+    READY_MESSAGE,
     RECONNECT_INTERVAL,
+    VERSION_QUERY_DELAY,
     signal_connection,
     signal_decoded,
     signal_diagnostics,
 )
+from .firmware import FlashError, can_flash, flash
 from .protocol import LineCoder, NotSupportedError, Signal
 
 _LOGGER = logging.getLogger(__name__)
@@ -61,6 +67,7 @@ class HubDiagnostics:
 
 
 RSSI_REGEX = re.compile(r";R=(\d+);")
+READY_VERSION_REGEX = re.compile(re.escape(READY_MESSAGE) + r" V=([^;]+);")
 
 # Own decoders without a real checksum, whose sensors also need a second reception
 UNCHECKED_CODERS = {"nexus"}
@@ -92,6 +99,7 @@ class CC1101DuinoHub:
         self.device = device
         self.coder = LineCoder()
         self.connected = False
+        self.firmware_version: str | None = None
         self.diagnostics = HubDiagnostics()
         # SIGNALduino sensors confirmed by a second reception, and when others were first heard
         self._confirmed: set[tuple[str, str]] = set()
@@ -100,12 +108,29 @@ class CC1101DuinoHub:
         self._reader: asyncio.StreamReader | None = None
         self._send_lock = asyncio.Lock()
         self._reply: asyncio.Future[str] | None = None
+        self._run_task: asyncio.Task[None] | None = None
+        self._version_task: asyncio.Task[None] | None = None
+
+    @property
+    def can_flash(self) -> bool:
+        return can_flash(self.device)
 
     async def async_connect(self) -> None:
         """Connect once, raising on failure."""
         self._reader, self._writer = await async_open(self.device)
         self._set_connected(True)
         _LOGGER.info("Connected to CC1101Duino at %s", self.device)
+        self._set_firmware_version(None)
+        self._version_task = self.hass.async_create_background_task(
+            self._async_query_version(), f"{DOMAIN} {self.device} version"
+        )
+
+    @callback
+    def start(self) -> None:
+        """Start reading from the device, after async_connect succeeded once."""
+        self._run_task = self.hass.async_create_background_task(
+            self.async_run(), f"{DOMAIN} {self.device}"
+        )
 
     async def async_run(self) -> None:
         """Read lines forever, reconnecting whenever the connection drops."""
@@ -125,7 +150,48 @@ class CC1101DuinoHub:
             await asyncio.sleep(RECONNECT_INTERVAL)
 
     async def async_close(self) -> None:
+        tasks = [task for task in (self._run_task, self._version_task) if task is not None]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.wait(tasks)
+        self._run_task = self._version_task = None
         self._close()
+
+    async def _async_query_version(self) -> None:
+        """Ask for the version when the device did not print it on connecting."""
+        await asyncio.sleep(VERSION_QUERY_DELAY)
+        if self.firmware_version is not None:
+            return
+        try:
+            reply = await self._async_command("V")
+        except HomeAssistantError as err:
+            _LOGGER.debug("Querying the firmware version failed: %s", err)
+            return
+        if reply.startswith("OK "):
+            self._set_firmware_version(reply.removeprefix("OK "))
+        else:
+            # Firmware without versions rejects the command
+            self._set_firmware_version(LEGACY_FIRMWARE_VERSION)
+
+    async def async_install_firmware(self, image: bytes, progress: Callable[[int], None]) -> None:
+        """Flash firmware, pausing the connection meanwhile.
+
+        progress is called from a worker thread with the percentage done.
+        """
+        if not self.can_flash:
+            raise HomeAssistantError(
+                f"Cannot flash {self.device}: starting the bootloader needs a local serial port "
+                "or rfc2217:// connection"
+            )
+        async with self._send_lock:
+            await self.async_close()
+            try:
+                await self.hass.async_add_executor_job(flash, self.device, image, progress)
+            except (FlashError, OSError, serial.SerialException) as err:
+                raise HomeAssistantError(f"Flashing {self.device} failed: {err}") from err
+            finally:
+                self.start()
 
     async def _async_read_lines(self, reader: asyncio.StreamReader) -> None:
         while raw := await reader.readline():
@@ -145,6 +211,9 @@ class CC1101DuinoHub:
         if line.startswith(ECHO_PREFIX):
             message = line[len(ECHO_PREFIX) :]
             _LOGGER.info("CC1101Duino: %s", message)
+            if message.startswith(READY_MESSAGE):
+                match = READY_VERSION_REGEX.match(message)
+                self._set_firmware_version(match.group(1) if match else LEGACY_FIRMWARE_VERSION)
             self.diagnostics.firmware_message = message
             async_dispatcher_send(self.hass, signal_diagnostics(self.entry_id))
             return
@@ -226,6 +295,13 @@ class CC1101DuinoHub:
         The firmware blocks while transmitting and its serial buffer is tiny, so
         commands are strictly sequential.
         """
+        reply = await self._async_command(line)
+        # Replies are the command letter followed by "OK ..." or "BAD ..."
+        if reply.startswith("BAD"):
+            raise HomeAssistantError(f"{self.device} rejected {line.strip()}: {reply}")
+
+    async def _async_command(self, line: str) -> str:
+        """Send one command line, returning the reply after the command letter."""
         if not line.startswith(LINE_START):
             line = LINE_START + line
         line = line.rstrip("\r\n") + "\n"
@@ -245,10 +321,7 @@ class CC1101DuinoHub:
                 raise HomeAssistantError(f"No reply from {self.device} to {line.strip()}") from err
             finally:
                 self._reply = None
-
-        # Replies are the command letter followed by "OK ..." or "BAD ..."
-        if reply[1:].startswith("BAD"):
-            raise HomeAssistantError(f"{self.device} rejected {line.strip()}: {reply[1:]}")
+        return reply[1:]
 
     @callback
     def _set_connected(self, connected: bool) -> None:
@@ -256,6 +329,13 @@ class CC1101DuinoHub:
             return
         self.connected = connected
         async_dispatcher_send(self.hass, signal_connection(self.entry_id))
+
+    @callback
+    def _set_firmware_version(self, version: str | None) -> None:
+        if version == self.firmware_version:
+            return
+        self.firmware_version = version
+        async_dispatcher_send(self.hass, signal_diagnostics(self.entry_id))
 
     @callback
     def _close(self) -> None:

@@ -9,6 +9,13 @@ is a trimmed-down [SIGNALDuino](https://github.com/RFD-FHEM/SIGNALDuino) (see `L
 Built with [PlatformIO](https://platformio.org/) for `nanoatmega328new`: `pio run -t upload`.
 Pin assignments and default receive frequency/modulation are in `include/config.h`.
 
+The Home Assistant integration bundles a build of the firmware and can install it (see
+[Firmware updates](#firmware-updates)), so after the first upload the firmware can be kept up to
+date from Home Assistant. When changing the firmware, bump `FIRMWARE_VERSION` in
+`include/version.h` and run `scripts/build_firmware.py`, which builds it into
+`custom_components/cc1101duino/firmware/`. CI checks that the bundled build matches the source;
+the toolchain and libraries are pinned in `platformio.ini` so that builds are reproducible.
+
 ## Home Assistant integration
 
 ### Installation
@@ -77,6 +84,15 @@ of received / decoded / unrecognized signals since startup, and the last status 
 firmware. The firmware prints `RX initialized F=<MHz>;M=<n>` when it starts, so that message shows
 which frequency it is listening on. The frequency is kept across restarts of the firmware.
 
+### Firmware updates
+
+The *Firmware* update entity of the CC1101Duino device shows the firmware version the device
+reports and the version bundled with the integration, and offers to install the bundled firmware
+when they differ. Firmware from before versions were introduced shows up as version `0`.
+Installing resets the Arduino into its bootloader through DTR, like `avrdude -c arduino`, so it
+needs a local serial port or an `rfc2217://` connection (ser2net in telnet mode). Over a plain
+`socket://` connection the entity only shows the versions.
+
 ### Events
 
 Decoded non-sensor signals, such as remote button presses, fire a `cc1101duino_signal` event:
@@ -124,6 +140,7 @@ data:
 | --- | --- |
 | `F<MHz>` | Set receive frequency |
 | `M<n>` | Set receive modulation (0 = 2-FSK, 1 = GFSK, 2 = ASK/OOK, 3 = 4-FSK, 4 = MSK) |
+| `V` | Report the firmware version |
 | `S;F=..;M=..;R=..;S=..;P0=..;D=..;` | Transmit pulses, as in [SIGNALDuino `SR`](https://github.com/RFD-FHEM/SIGNALDuino/wiki/Commands#sendraw--sr), plus `F` frequency, `M` modulation, `S` spacing between repeats (µs) |
 
 If more than one CC1101Duino is set up, pass `config_entry_id` to either service.
