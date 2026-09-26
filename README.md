@@ -30,17 +30,43 @@ port without losing its sensors.
 | Protocol | Frequency | Receive | Transmit |
 | --- | --- | --- | --- |
 | `lacrosse` — LaCrosse TX temperature / humidity sensors | 433.88 MHz | sensor entities | – |
+| `nexus` — Nexus temperature / humidity sensors, also sold under other brands | 433.92 MHz | sensor entities | – |
 | `minka_aire` — Minka Aire ceiling fan remotes | 304.2 MHz | `cc1101duino_signal` event | `cc1101duino.send_signal` |
+| [SIGNALduino](#signalduino-protocols) — everything FHEM's SIGNALduino receives over ASK/OOK | mostly 433.92 MHz | sensor entities or `cc1101duino_signal` event | – |
 
 The receiver listens on one frequency at a time (433.88 MHz by default); change it with
 `cc1101duino.send_raw` and `line: F304.2`.
 
+#### SIGNALduino protocols
+
+Since the firmware is a SIGNALDuino, its messages are also run through a Python port of
+[FHEM's SIGNALduino module](https://github.com/RFD-FHEM/RFFHEM): the protocol list and
+demodulation (MS, MU and MC messages), and the FHEM modules that decode weather sensors:
+
+| FHEM module | Sensors |
+| --- | --- |
+| `SD_WS` | Many weather sensors: Auriol, Bresser 7009994 / Temeo, EuroChron EFTH-800, Fine Offset WH2, TFA (30.3208, 30.3212, 30.3221, 30.3222, 30.3233, 30.3251, 30.3255, 35.1077), TS-FT002, Sainlogic, ADE WS1907, EMOS E06016, BBQ thermometers, ... |
+| `CUL_TCM97001` | TCM 97001, ABS700, Prologue, Mebus, GT-WT-02, NC-WS, Rubicson, Auriol, KW9010, Ventus W044 / W132 / W174, PFR-130, ... |
+| `Hideki` | Bresser, Cresta, TFA, Hama and other Hideki sensors (thermo/hygro, wind, rain) |
+| `OREGON` | Oregon Scientific v1, v2 and v3 sensors |
+| `SD_WS07`, `SD_WS09`, `CUL_TX`, `CUL_WS`, `SD_WS_Maverick` | Eurochron / Hama TS36E, WH1080 / CTW600, LaCrosse TX2 / TX3, ELV S300 / WS2000 / WS7000, Maverick ET-732 |
+
+Messages of other SIGNALduino protocols, such as remotes, doorbells, switches and blinds (IT,
+SD_UT, SD_BELL, Somfy, FS20, ...), fire a [`cc1101duino_signal` event](#events) with the
+demodulated message as FHEM would pass it on. xFSK protocols (Bresser 5-in-1, LaCrosse IT+,
+WMBus, ...) cannot be received by this firmware.
+
 ### Sensors
 
-Each sensor that is heard gets a device with temperature and/or humidity entities. Since that
-includes your neighbours' sensors, you can turn *Automatically add new sensors* off in the
-integration options once yours have shown up, and delete unwanted devices. LaCrosse sensors pick
-a new ID when their batteries are changed.
+Each sensor that is heard gets a device with entities for what it reports: temperature,
+humidity, pressure, wind, rain, UV, illuminance, and a battery warning. Since that includes your
+neighbours' sensors, you can turn *Automatically add new sensors* off in the integration options
+once yours have shown up, and delete unwanted devices. Many sensors pick a new ID when their
+batteries are changed.
+
+Many protocols have no checksum, so noise sometimes looks like a sensor. As in FHEM, a
+SIGNALduino (or Nexus) sensor is only added once it has been heard a second time within three
+minutes. SIGNALduino sensors are named by their FHEM device code, e.g. `SD_WS_27_TH_2`.
 
 ### Diagnostics
 
@@ -62,6 +88,20 @@ data:
   type: command
   id: "00101001"
   command: light_1
+  config_entry_id: 01J...
+```
+
+SIGNALduino messages carry the protocol and the demodulated message. A message repeated within
+two seconds fires only one event, since remotes send each press several times:
+
+```yaml
+event_type: cc1101duino_signal
+data:
+  coder: signalduino
+  type: message
+  protocol: "3"
+  name: chip xx2260 / xx2262
+  data: iF99726
   config_entry_id: 01J...
 ```
 
@@ -93,8 +133,13 @@ If more than one CC1101Duino is set up, pass `config_entry_id` to either service
 Protocols live in `custom_components/cc1101duino/protocol/`, which has no Home Assistant
 dependencies. A coder (see `coders/lacrosse.py`) picks a packetizer that turns pulse timings into
 bits, and decodes those bits into a signal dict. Register it in `coders/__init__.py`. Sensor
-signals (`type: sensor`) with a `subtype` listed in `sensor.py` become entities, and everything
-else becomes an event.
+signals (`type: sensor`) with a `subtype` listed in `sensor.py` or `binary_sensor.py` become
+entities, and everything else becomes an event.
+
+The SIGNALduino port is in `protocol/signalduino/`. Its protocol list, `protocols.json`, is
+generated from RFFHEM by `scripts/import_signalduino_protocols.pl`, and the functions it refers to
+are in `functions.py`. FHEM client modules are ported in `clients/`, and `coder.py` maps their
+readings to signals.
 
 ### Development
 
@@ -103,4 +148,6 @@ uv run --with-requirements requirements_test.txt pytest
 ```
 
 `tests/fixtures/reference.json` holds output captured from the original Node-RED/TypeScript
-decoder, which the Python port is tested against.
+decoder, which the Python port is tested against. `tests/fixtures/signalduino.json` holds FHEM's
+test data, from raw firmware messages to readings, collected by
+`scripts/import_signalduino_testdata.py`; the SIGNALduino port is tested against it.

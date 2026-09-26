@@ -21,6 +21,7 @@ from .const import (
     SERVICE_SEND_SIGNAL,
 )
 from .hub import CC1101DuinoHub
+from .protocol.signalduino import load_protocols
 
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
@@ -79,6 +80,8 @@ def _get_hub(hass: HomeAssistant, entry_id: str | None) -> CC1101DuinoHub:
 
 async def async_setup_entry(hass: HomeAssistant, entry: CC1101DuinoConfigEntry) -> bool:
     """Set up a CC1101Duino from a config entry."""
+    # Reading the SIGNALduino protocol list is file I/O; it is cached afterwards
+    await hass.async_add_executor_job(load_protocols)
     hub = CC1101DuinoHub(hass, entry.entry_id, entry.data[CONF_DEVICE])
     try:
         await hub.async_connect()

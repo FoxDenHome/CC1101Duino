@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_DEVICE, STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 
@@ -16,6 +17,10 @@ from custom_components.cc1101duino.const import CONF_AUTOMATIC_ADD, DOMAIN, EVEN
 
 LACROSSE_TEMP = "^SMU;P0=19800;P1=-1086;P2=1412;P3=618;P4=-8096;P5=164;P6=-552;D=0121212131213121212121212131313121212121213121312131213121313121213121312131213131213134565;CP=3;R=190;F=433.88;M=2;"
 NOISE = "^SMU;P0=-188;P1=-921;P2=739;P3=268;P4=-406;P5=566;P6=-299;P7=350;D=12121213434563434343434343434347656505034745;CP=3;R=186;F=433.88;M=2;"
+# EuroChron EFTH-800 (SIGNALduino protocol 27), 15.5 °C / 48 %
+EFTH800 = "^SMU;P0=-224;P1=258;P2=-487;P3=505;P4=-4884;P5=743;P6=-718;D=0121212301212303030301212123012123012123030123030121212121230121230121212121212121230301214565656561212123012121230121230303030121212301212301212303012303012121212123012123012121212121212123030121;CP=1;R=53;F=433.92;M=2;"
+# Intertek / ELRO remote (SIGNALduino protocol 3)
+IT_REMOTE = "^SMS;P1=-12556;P2=1219;P3=-406;P4=412;P5=-1205;D=41232323232345452323454523452323234545234545232345;CP=4;SP=1;R=35;O;m2;F=433.92;M=2;"
 MINKA_OFF = "^SMU;P0=417;P1=-417;D=011011010011010011011010010011010011011;F=304.2;M=2;"
 
 
@@ -140,6 +145,65 @@ async def test_diagnostics(hass: HomeAssistant, fake_serial: FakeSerial) -> None
     fake_serial.reader.feed_eof()
     await hass.async_block_till_done()
     assert state("binary_sensor", "connected").state == STATE_OFF
+
+
+async def test_signalduino_sensor(hass: HomeAssistant, fake_serial: FakeSerial) -> None:
+    entry = await setup_entry(hass)
+    now = 1000.0
+
+    async def feed(line: str, at: float) -> None:
+        nonlocal now
+        now = at
+        fake_serial.feed(line)
+        await hass.async_block_till_done()
+
+    with patch("custom_components.cc1101duino.hub.time.monotonic", side_effect=lambda: now):
+        # Heard once, or twice within one transmission, is not enough to add a sensor
+        await feed(EFTH800, 1000)
+        await feed(EFTH800, 1001)
+        assert remote_sensors(hass, entry) == []
+
+        await feed(EFTH800, 1060)
+
+    registry = er.async_get(hass)
+    entity_ids = {
+        reg_entry.unique_id.rsplit("-", 1)[1]: reg_entry.entity_id
+        for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if "SD_WS_27_TH_2" in reg_entry.unique_id
+    }
+    assert set(entity_ids) == {"temperature", "humidity", "battery_low"}
+    assert hass.states.get(entity_ids["temperature"]).state == "15.5"
+    assert hass.states.get(entity_ids["humidity"]).state == "48"
+    assert hass.states.get(entity_ids["battery_low"]).state == "off"
+    assert registry.async_get(entity_ids["battery_low"]).entity_category == "diagnostic"
+
+    device = dr.async_get(hass).async_get(registry.async_get(entity_ids["temperature"]).device_id)
+    assert device.name == "SD_WS_27_TH_2"
+    assert device.model == "EFTH-800, EFS-3110A"
+
+
+async def test_signalduino_message_fires_event(
+    hass: HomeAssistant, fake_serial: FakeSerial
+) -> None:
+    entry = await setup_entry(hass)
+    events = async_capture_events(hass, EVENT_SIGNAL)
+    fake_serial.feed(IT_REMOTE)
+    # The remote repeats the press
+    fake_serial.feed(IT_REMOTE)
+    await hass.async_block_till_done()
+
+    assert [e.data for e in events if e.data["protocol"] == "3"] == [
+        {
+            "coder": "signalduino",
+            "type": "message",
+            "protocol": "3",
+            "name": "chip xx2260 / xx2262",
+            "data": "iF99726",
+            "config_entry_id": entry.entry_id,
+        }
+    ]
+    # Both receptions count as decoded
+    assert hass.states.get(hub_entity(hass, entry, "sensor", "signals_decoded")).state == "2"
 
 
 async def test_command_fires_event(hass: HomeAssistant, fake_serial: FakeSerial) -> None:

@@ -10,6 +10,11 @@ BAUDRATE: Final = 115200
 RECONNECT_INTERVAL: Final = 10
 COMMAND_TIMEOUT: Final = 5
 
+# A new SIGNALduino sensor is added when heard twice within this many seconds (FHEM's 2:180),
+# at least AUTOCREATE_MIN_GAP apart so the repeats of one transmission count once
+AUTOCREATE_WINDOW: Final = 180
+AUTOCREATE_MIN_GAP: Final = 2
+
 EVENT_SIGNAL: Final = f"{DOMAIN}_signal"
 
 SERVICE_SEND_SIGNAL: Final = "send_signal"

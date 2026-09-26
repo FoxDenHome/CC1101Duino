@@ -12,7 +12,8 @@ REFERENCE = json.loads((Path(__file__).parent / "fixtures" / "reference.json").r
 
 @pytest.fixture
 def coder() -> LineCoder:
-    return LineCoder()
+    # The reference covers the decoders ported from TypeScript; SIGNALduino has its own tests
+    return LineCoder(signalduino=False)
 
 
 @pytest.mark.parametrize("case", REFERENCE["decoded"], ids=lambda c: c["line"][:40])
@@ -43,9 +44,54 @@ def test_encode_decode_roundtrip(coder: LineCoder, case) -> None:
     ]
 
 
+# Captured from a Nexus sensor: ID 180, channel 2, 16.8 °C, 60 or 61 %. This is the last packet of
+# the transmission, so its final (humidity) bit merges into the silence after it.
+NEXUS_D = "03020102020102010102010102010101010201020102010101020202020101020202020104"
+NEXUS_LAST = (
+    f"^SMU;P0=424;P1=-1070;P2=-2058;P3=-4060;P4=-32001;D={NEXUS_D};CP=0;R=170;F=433.88;M=2;"
+)
+# A full packet (final bit 0) followed by the start of a repeat
+NEXUS_FULL = NEXUS_LAST.replace(NEXUS_D, NEXUS_D[:-2] + "0103" + NEXUS_D[2:40])
+
+
+def nexus(subtype: str, unit: str, value: float) -> dict:
+    return {
+        "coder": "nexus",
+        "type": "sensor",
+        "subtype": subtype,
+        "id": "180",
+        "unit": unit,
+        "value": value,
+    }
+
+
+def test_nexus_last_packet_has_temperature_only(coder: LineCoder) -> None:
+    assert coder.process_signal_line(NEXUS_LAST) == [nexus("temperature", "°C", 16.8)]
+
+
+def test_nexus_full_packet(coder: LineCoder) -> None:
+    assert coder.process_signal_line(NEXUS_FULL) == [
+        nexus("temperature", "°C", 16.8),
+        nexus("humidity", "%", 60),
+    ]
+
+
+def test_nexus_negative_temperature(coder: LineCoder) -> None:
+    # -5.0 °C is 0xFCE in 12 bit two's complement
+    bits = f"{180:08b}" + "1001" + f"{0xFCE:012b}" + "1111" + f"{55:08b}"
+    data = "03" + "".join("02" if bit == "1" else "01" for bit in bits) + "03"
+    line = f"^SMU;P0=500;P1=-1000;P2=-2000;P3=-4000;D={data};CP=0;R=170;F=433.92;M=2;"
+    assert coder.process_signal_line(line) == [
+        nexus("temperature", "°C", -5.0),
+        nexus("humidity", "%", 55),
+    ]
+
+
 @pytest.mark.parametrize(
     "line",
     [
+        # Heard from the middle, without the sync gap in front
+        NEXUS_LAST.replace(NEXUS_D, NEXUS_D[2:]),
         "",
         "garbage",
         "^$SOK Done",

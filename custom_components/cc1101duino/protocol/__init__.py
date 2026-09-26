@@ -5,18 +5,23 @@ from __future__ import annotations
 from .coders import ALL_CODERS, Signal, SignalCoder
 from .packetizers import SignalPacketizer
 from .signal import BinarySignal, NotSupportedError, RawSignal
+from .signalduino.coder import SignalduinoCoder
 
-__all__ = ["LineCoder", "NotSupportedError", "RawSignal", "Signal"]
+__all__ = ["LineCoder", "NotSupportedError", "Signal"]
 
 
 class LineCoder:
     """Converts between firmware serial lines and decoded signal dicts."""
 
-    def __init__(self, coders: list[type[SignalCoder]] | None = None) -> None:
+    def __init__(
+        self, coders: list[type[SignalCoder]] | None = None, signalduino: bool = True
+    ) -> None:
         self.packetizers: dict[type[SignalPacketizer], SignalPacketizer] = {}
         self.coders: dict[str, SignalCoder] = {}
         for coder_class in ALL_CODERS if coders is None else coders:
             self.load_coder(coder_class())
+        # All protocols SIGNALduino knows, decoded like FHEM does
+        self.signalduino = SignalduinoCoder() if signalduino else None
 
     def load_coder(self, coder: SignalCoder) -> None:
         if coder.packetizer not in self.packetizers:
@@ -36,12 +41,16 @@ class LineCoder:
 
     def process_signal_line(self, line: str) -> list[Signal]:
         """Decode one received line. Identical packets repeated within it are reported once."""
+        results: list[Signal] = []
         raw_signal = RawSignal.from_string(line)
-        if raw_signal is None:
-            return []
-        return self.process_raw_signal(raw_signal)
+        if raw_signal is not None:
+            results = self._process_raw_signal(raw_signal)
+        # SIGNALduino's many protocols often also match a signal the own decoders verified
+        if not results and self.signalduino is not None and line.startswith("^S"):
+            results = self.signalduino.process_line(line)
+        return results
 
-    def process_raw_signal(self, raw_signal: RawSignal) -> list[Signal]:
+    def _process_raw_signal(self, raw_signal: RawSignal) -> list[Signal]:
         results: list[Signal] = []
         packetized: dict[type[SignalPacketizer], list[BinarySignal]] = {}
 
@@ -57,8 +66,8 @@ class LineCoder:
                 packetized[coder.packetizer] = signals
 
             for bin_sig in signals:
-                decoded = coder.decode(bin_sig.copy())
-                if decoded is not None and decoded not in results:
-                    results.append(decoded)
+                for decoded in coder.decode(bin_sig.copy()):
+                    if decoded not in results:
+                        results.append(decoded)
 
         return results

@@ -61,6 +61,33 @@
       },
       "firmware_message": {
         "name": "Firmware message"
+      },
+      "temperature_2": {
+        "name": "Temperature 2"
+      },
+      "temperature_3": {
+        "name": "Temperature 3"
+      },
+      "temperature_4": {
+        "name": "Temperature 4"
+      },
+      "temperature_food": {
+        "name": "Food temperature"
+      },
+      "temperature_bbq": {
+        "name": "BBQ temperature"
+      },
+      "wind_chill": {
+        "name": "Wind chill"
+      },
+      "wind_speed_average": {
+        "name": "Average wind speed"
+      },
+      "wind_gust": {
+        "name": "Wind gust"
+      },
+      "uv_index": {
+        "name": "UV index"
       }
     }
   },

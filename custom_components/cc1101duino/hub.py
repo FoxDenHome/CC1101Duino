@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -15,6 +17,8 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    AUTOCREATE_MIN_GAP,
+    AUTOCREATE_WINDOW,
     BAUDRATE,
     COMMAND_TIMEOUT,
     EVENT_SIGNAL,
@@ -23,7 +27,7 @@ from .const import (
     signal_decoded,
     signal_diagnostics,
 )
-from .protocol import LineCoder, NotSupportedError, RawSignal, Signal
+from .protocol import LineCoder, NotSupportedError, Signal
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,11 +60,22 @@ class HubDiagnostics:
     firmware_message: str | None = None
 
 
-def _rssi_dbm(raw_signal: RawSignal | None) -> int | None:
+RSSI_REGEX = re.compile(r";R=(\d+);")
+
+# Own decoders without a real checksum, whose sensors also need a second reception
+UNCHECKED_CODERS = {"nexus"}
+
+
+def _needs_confirmation(signal: Signal) -> bool:
+    return "protocol" in signal or signal.get("coder") in UNCHECKED_CODERS
+
+
+def _rssi_dbm(line: str) -> int | None:
     """The firmware reports the driver's signed dBm value truncated to a uint8."""
-    if raw_signal is None or raw_signal.rssi < 0:
+    if (match := RSSI_REGEX.search(line)) is None:
         return None
-    return raw_signal.rssi - 256 if raw_signal.rssi >= 128 else raw_signal.rssi
+    rssi = int(match.group(1))
+    return rssi - 256 if rssi >= 128 else rssi
 
 
 async def async_open(device: str) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
@@ -78,6 +93,9 @@ class CC1101DuinoHub:
         self.coder = LineCoder()
         self.connected = False
         self.diagnostics = HubDiagnostics()
+        # SIGNALduino sensors confirmed by a second reception, and when others were first heard
+        self._confirmed: set[tuple[str, str]] = set()
+        self._sightings: dict[tuple[str, str], float] = {}
         self._writer: asyncio.StreamWriter | None = None
         self._reader: asyncio.StreamReader | None = None
         self._send_lock = asyncio.Lock()
@@ -135,16 +153,50 @@ class CC1101DuinoHub:
             _LOGGER.debug("Ignoring unknown line: %s", line)
             return
 
-        raw_signal = RawSignal.from_string(line)
-        signals = [] if raw_signal is None else self.coder.process_raw_signal(raw_signal)
-        self._record_signal(ReceivedSignal(dt_util.utcnow(), line, _rssi_dbm(raw_signal), signals))
+        signals = self.coder.process_signal_line(line)
+        self._record_signal(ReceivedSignal(dt_util.utcnow(), line, _rssi_dbm(line), signals))
+        self._note_sightings(signals)
 
         for signal in signals:
             _LOGGER.debug("Decoded: %s", signal)
+            if signal.pop("repeat", False):
+                continue
             async_dispatcher_send(self.hass, signal_decoded(self.entry_id), signal)
             # Sensor readings become entities; everything else (remote buttons, ...) is an event
             if signal.get("type") != "sensor":
                 self.hass.bus.async_fire(EVENT_SIGNAL, {**signal, "config_entry_id": self.entry_id})
+
+    def is_confirmed(self, signal: Signal) -> bool:
+        """Whether a new sensor may be added for this signal.
+
+        Many protocols have no checksum, so like FHEM's autocreate a sensor of such a
+        protocol is only added once it was heard again within a few minutes.
+        """
+        if not _needs_confirmation(signal):
+            return True
+        return (signal["coder"], signal["id"]) in self._confirmed
+
+    @callback
+    def _note_sightings(self, signals: list[Signal]) -> None:
+        now = time.monotonic()
+        self._sightings = {
+            device: first
+            for device, first in self._sightings.items()
+            if now - first <= AUTOCREATE_WINDOW
+        }
+        devices = {
+            (signal["coder"], signal["id"])
+            for signal in signals
+            if signal.get("type") == "sensor" and _needs_confirmation(signal)
+        }
+        for device in devices - self._confirmed:
+            first = self._sightings.get(device)
+            if first is None:
+                self._sightings[device] = now
+            # Repeats within one transmission do not count as a second reception
+            elif now - first >= AUTOCREATE_MIN_GAP:
+                self._confirmed.add(device)
+                del self._sightings[device]
 
     @callback
     def _record_signal(self, received: ReceivedSignal) -> None:
