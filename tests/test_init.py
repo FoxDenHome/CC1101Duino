@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_DEVICE, STATE_UNAVAILABLE
+from homeassistant.const import CONF_DEVICE, STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -15,6 +15,7 @@ from custom_components.cc1101duino.config_flow import _list_ports
 from custom_components.cc1101duino.const import CONF_AUTOMATIC_ADD, DOMAIN, EVENT_SIGNAL
 
 LACROSSE_TEMP = "^SMU;P0=19800;P1=-1086;P2=1412;P3=618;P4=-8096;P5=164;P6=-552;D=0121212131213121212121212131313121212121213121312131213121313121213121312131213131213134565;CP=3;R=190;F=433.88;M=2;"
+NOISE = "^SMU;P0=-188;P1=-921;P2=739;P3=268;P4=-406;P5=566;P6=-299;P7=350;D=12121213434563434343434343434347656505034745;CP=3;R=186;F=433.88;M=2;"
 MINKA_OFF = "^SMU;P0=417;P1=-417;D=011011010011010011011010010011010011011;F=304.2;M=2;"
 
 
@@ -47,6 +48,21 @@ def fake_serial():
         yield fake
 
 
+def remote_sensors(hass: HomeAssistant, entry: MockConfigEntry) -> list[er.RegistryEntry]:
+    """Entities of wireless sensors, leaving out the hub's own diagnostics."""
+    return [
+        reg_entry
+        for reg_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        if reg_entry.entity_category is None
+    ]
+
+
+def hub_entity(hass: HomeAssistant, entry: MockConfigEntry, domain: str, key: str) -> str:
+    entity_id = er.async_get(hass).async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}-{key}")
+    assert entity_id is not None
+    return entity_id
+
+
 async def setup_entry(hass: HomeAssistant, **options) -> MockConfigEntry:
     entry = MockConfigEntry(domain=DOMAIN, data={CONF_DEVICE: "/dev/ttyFAKE"}, options=options)
     entry.add_to_hass(hass)
@@ -63,7 +79,7 @@ async def test_lacrosse_sensor_auto_added(hass: HomeAssistant, fake_serial: Fake
     fake_serial.feed(LACROSSE_TEMP)
     await hass.async_block_till_done()
 
-    entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    entities = remote_sensors(hass, entry)
     assert len(entities) == 1
     state = hass.states.get(entities[0].entity_id)
     assert state.state == "5.6"
@@ -84,7 +100,46 @@ async def test_automatic_add_disabled(hass: HomeAssistant, fake_serial: FakeSeri
     entry = await setup_entry(hass, **{CONF_AUTOMATIC_ADD: False})
     fake_serial.feed(LACROSSE_TEMP)
     await hass.async_block_till_done()
-    assert er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id) == []
+    assert remote_sensors(hass, entry) == []
+
+
+async def test_diagnostics(hass: HomeAssistant, fake_serial: FakeSerial) -> None:
+    entry = await setup_entry(hass)
+
+    def state(domain: str, key: str):
+        return hass.states.get(hub_entity(hass, entry, domain, key))
+
+    assert state("binary_sensor", "connected").state == STATE_ON
+    assert state("sensor", "signals_received").state == "0"
+    assert state("sensor", "last_signal").state == "unknown"
+
+    fake_serial.feed("^<RX initialized F=433.88;M=2")
+    fake_serial.feed(LACROSSE_TEMP)
+    fake_serial.feed(NOISE)
+    await hass.async_block_till_done()
+
+    assert state("sensor", "firmware_message").state == "RX initialized F=433.88;M=2"
+    assert state("sensor", "signals_received").state == "2"
+    assert state("sensor", "signals_decoded").state == "1"
+    assert state("sensor", "signals_unrecognized").state == "1"
+    assert state("sensor", "signal_strength").state == "-70"
+
+    last = state("sensor", "last_signal")
+    assert last.attributes["line"] == NOISE
+    assert last.attributes["signals"] == []
+
+    decoded = state("sensor", "last_decoded_signal")
+    assert decoded.attributes["line"] == LACROSSE_TEMP
+    assert decoded.attributes["rssi"] == -66
+    assert decoded.attributes["signals"][0]["value"] == 5.6
+
+    unrecognized = state("sensor", "last_unrecognized_signal")
+    assert unrecognized.attributes["line"] == NOISE
+    assert unrecognized.state == last.state
+
+    fake_serial.reader.feed_eof()
+    await hass.async_block_till_done()
+    assert state("binary_sensor", "connected").state == STATE_OFF
 
 
 async def test_command_fires_event(hass: HomeAssistant, fake_serial: FakeSerial) -> None:

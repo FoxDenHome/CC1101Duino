@@ -39,6 +39,31 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "last_signal": {
+        "name": "Last signal"
+      },
+      "last_decoded_signal": {
+        "name": "Last decoded signal"
+      },
+      "last_unrecognized_signal": {
+        "name": "Last unrecognized signal"
+      },
+      "signals_received": {
+        "name": "Signals received"
+      },
+      "signals_decoded": {
+        "name": "Signals decoded"
+      },
+      "signals_unrecognized": {
+        "name": "Signals unrecognized"
+      },
+      "firmware_message": {
+        "name": "Firmware message"
+      }
+    }
+  },
   "services": {
     "send_signal": {
       "name": "Send signal",

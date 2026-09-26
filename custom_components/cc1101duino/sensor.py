@@ -1,16 +1,24 @@
-"""Sensors for values received from wireless sensors (e.g. LaCrosse TX)."""
+"""Sensors for values received from wireless sensors (e.g. LaCrosse TX), and hub diagnostics."""
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, NamedTuple
 
 from homeassistant.components.sensor import (
     RestoreSensor,
     SensorDeviceClass,
+    SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.const import (
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    EntityCategory,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -18,7 +26,14 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import CC1101DuinoConfigEntry
-from .const import CONF_AUTOMATIC_ADD, DOMAIN, signal_connection, signal_decoded
+from .const import (
+    CONF_AUTOMATIC_ADD,
+    DOMAIN,
+    signal_connection,
+    signal_decoded,
+    signal_diagnostics,
+)
+from .hub import HubDiagnostics, ReceivedSignal
 from .protocol import Signal
 
 SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
@@ -37,6 +52,73 @@ SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         suggested_display_precision=0,
     ),
 }
+
+
+@dataclass(frozen=True, kw_only=True)
+class HubSensorDescription(SensorEntityDescription):
+    value_fn: Callable[[HubDiagnostics], Any]
+    attrs_fn: Callable[[HubDiagnostics], dict[str, Any] | None] = lambda _: None
+
+
+def _signal_attrs(received: ReceivedSignal | None) -> dict[str, Any] | None:
+    if received is None:
+        return None
+    return {"line": received.line, "rssi": received.rssi, "signals": received.signals}
+
+
+HUB_SENSOR_DESCRIPTIONS: tuple[HubSensorDescription, ...] = (
+    HubSensorDescription(
+        key="last_signal",
+        translation_key="last_signal",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda diag: diag.last_received and diag.last_received.time,
+        attrs_fn=lambda diag: _signal_attrs(diag.last_received),
+    ),
+    HubSensorDescription(
+        key="last_decoded_signal",
+        translation_key="last_decoded_signal",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda diag: diag.last_decoded and diag.last_decoded.time,
+        attrs_fn=lambda diag: _signal_attrs(diag.last_decoded),
+    ),
+    HubSensorDescription(
+        key="last_unrecognized_signal",
+        translation_key="last_unrecognized_signal",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda diag: diag.last_unrecognized and diag.last_unrecognized.time,
+        attrs_fn=lambda diag: _signal_attrs(diag.last_unrecognized),
+    ),
+    HubSensorDescription(
+        key="signal_strength",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        value_fn=lambda diag: diag.last_received and diag.last_received.rssi,
+    ),
+    HubSensorDescription(
+        key="signals_received",
+        translation_key="signals_received",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda diag: diag.received,
+    ),
+    HubSensorDescription(
+        key="signals_decoded",
+        translation_key="signals_decoded",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda diag: diag.decoded,
+    ),
+    HubSensorDescription(
+        key="signals_unrecognized",
+        translation_key="signals_unrecognized",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda diag: diag.unrecognized,
+    ),
+    HubSensorDescription(
+        key="firmware_message",
+        translation_key="firmware_message",
+        value_fn=lambda diag: diag.firmware_message,
+    ),
+)
 
 CODER_NAMES = {
     "lacrosse": "LaCrosse",
@@ -71,6 +153,10 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Recreate previously seen sensors and add new ones as they are heard."""
+    async_add_entities(
+        CC1101DuinoHubSensor(entry, description) for description in HUB_SENSOR_DESCRIPTIONS
+    )
+
     entities: dict[SensorKey, CC1101DuinoSensor] = {}
 
     def add(keys: list[SensorKey]) -> None:
@@ -147,3 +233,36 @@ class CC1101DuinoSensor(RestoreSensor):
         self._attr_native_value = value
         if self.hass is not None:
             self.async_write_ha_state()
+
+
+class CC1101DuinoHubSensor(SensorEntity):
+    """A diagnostic value about the signals the hub itself has received."""
+
+    entity_description: HubSensorDescription
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    # The raw lines change with every signal and are only useful live
+    _unrecorded_attributes = frozenset({"line", "rssi", "signals"})
+
+    def __init__(self, entry: CC1101DuinoConfigEntry, description: HubSensorDescription) -> None:
+        self.entity_description = description
+        self._hub = entry.runtime_data
+        self._attr_unique_id = f"{entry.entry_id}-{description.key}"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+
+    @property
+    def native_value(self) -> Any:
+        return self.entity_description.value_fn(self._hub.diagnostics)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        return self.entity_description.attrs_fn(self._hub.diagnostics)
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, signal_diagnostics(self._hub.entry_id), self.async_write_ha_state
+            )
+        )

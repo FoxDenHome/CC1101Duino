@@ -6,7 +6,7 @@ from .coders import ALL_CODERS, Signal, SignalCoder
 from .packetizers import SignalPacketizer
 from .signal import BinarySignal, NotSupportedError, RawSignal
 
-__all__ = ["LineCoder", "NotSupportedError", "Signal"]
+__all__ = ["LineCoder", "NotSupportedError", "RawSignal", "Signal"]
 
 
 class LineCoder:
@@ -39,7 +39,9 @@ class LineCoder:
         raw_signal = RawSignal.from_string(line)
         if raw_signal is None:
             return []
+        return self.process_raw_signal(raw_signal)
 
+    def process_raw_signal(self, raw_signal: RawSignal) -> list[Signal]:
         results: list[Signal] = []
         packetized: dict[type[SignalPacketizer], list[BinarySignal]] = {}
 

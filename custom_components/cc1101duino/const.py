@@ -28,3 +28,8 @@ def signal_decoded(entry_id: str) -> str:
 def signal_connection(entry_id: str) -> str:
     """Dispatcher signal sent when the connection state of a config entry changes."""
     return f"{DOMAIN}_connection_{entry_id}"
+
+
+def signal_diagnostics(entry_id: str) -> str:
+    """Dispatcher signal sent when the hub's diagnostics change."""
+    return f"{DOMAIN}_diagnostics_{entry_id}"

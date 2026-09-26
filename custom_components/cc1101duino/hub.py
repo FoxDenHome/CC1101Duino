@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime
 
 import serial
 import serial_asyncio_fast
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.util import dt as dt_util
 
 from .const import (
     BAUDRATE,
@@ -18,14 +21,46 @@ from .const import (
     RECONNECT_INTERVAL,
     signal_connection,
     signal_decoded,
+    signal_diagnostics,
 )
-from .protocol import LineCoder, NotSupportedError, Signal
+from .protocol import LineCoder, NotSupportedError, RawSignal, Signal
 
 _LOGGER = logging.getLogger(__name__)
 
 LINE_START = "^"
 REPLY_PREFIX = "^$"
 ECHO_PREFIX = "^<"
+SIGNAL_PREFIX = "^S"
+
+
+@dataclass
+class ReceivedSignal:
+    """One radio signal reported by the firmware, and what it decoded to."""
+
+    time: datetime
+    line: str
+    rssi: int | None
+    signals: list[Signal] = field(default_factory=list)
+
+
+@dataclass
+class HubDiagnostics:
+    """What the hub has heard since it was set up."""
+
+    received: int = 0
+    decoded: int = 0
+    unrecognized: int = 0
+    last_received: ReceivedSignal | None = None
+    last_decoded: ReceivedSignal | None = None
+    last_unrecognized: ReceivedSignal | None = None
+    firmware_message: str | None = None
+
+
+def _rssi_dbm(raw_signal: RawSignal | None) -> int | None:
+    """The firmware reports the driver's signed dBm value truncated to a uint8."""
+    if raw_signal is None or raw_signal.rssi < 0:
+        return None
+    return raw_signal.rssi - 256 if raw_signal.rssi >= 128 else raw_signal.rssi
 
 
 async def async_open(device: str) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
@@ -42,6 +77,7 @@ class CC1101DuinoHub:
         self.device = device
         self.coder = LineCoder()
         self.connected = False
+        self.diagnostics = HubDiagnostics()
         self._writer: asyncio.StreamWriter | None = None
         self._reader: asyncio.StreamReader | None = None
         self._send_lock = asyncio.Lock()
@@ -89,15 +125,40 @@ class CC1101DuinoHub:
             return
 
         if line.startswith(ECHO_PREFIX):
-            _LOGGER.info("CC1101Duino: %s", line[len(ECHO_PREFIX) :])
+            message = line[len(ECHO_PREFIX) :]
+            _LOGGER.info("CC1101Duino: %s", message)
+            self.diagnostics.firmware_message = message
+            async_dispatcher_send(self.hass, signal_diagnostics(self.entry_id))
             return
 
-        for signal in self.coder.process_signal_line(line):
+        if not line.startswith(SIGNAL_PREFIX):
+            _LOGGER.debug("Ignoring unknown line: %s", line)
+            return
+
+        raw_signal = RawSignal.from_string(line)
+        signals = [] if raw_signal is None else self.coder.process_raw_signal(raw_signal)
+        self._record_signal(ReceivedSignal(dt_util.utcnow(), line, _rssi_dbm(raw_signal), signals))
+
+        for signal in signals:
             _LOGGER.debug("Decoded: %s", signal)
             async_dispatcher_send(self.hass, signal_decoded(self.entry_id), signal)
             # Sensor readings become entities; everything else (remote buttons, ...) is an event
             if signal.get("type") != "sensor":
                 self.hass.bus.async_fire(EVENT_SIGNAL, {**signal, "config_entry_id": self.entry_id})
+
+    @callback
+    def _record_signal(self, received: ReceivedSignal) -> None:
+        diag = self.diagnostics
+        diag.received += 1
+        diag.last_received = received
+        if received.signals:
+            diag.decoded += 1
+            diag.last_decoded = received
+        else:
+            _LOGGER.debug("Unrecognized: %s", received.line)
+            diag.unrecognized += 1
+            diag.last_unrecognized = received
+        async_dispatcher_send(self.hass, signal_diagnostics(self.entry_id))
 
     async def async_send_signal(self, signal: Signal) -> None:
         """Encode a signal dict and transmit it."""

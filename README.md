@@ -42,6 +42,15 @@ includes your neighbours' sensors, you can turn *Automatically add new sensors* 
 integration options once yours have shown up, and delete unwanted devices. LaCrosse sensors pick
 a new ID when their batteries are changed.
 
+### Diagnostics
+
+The CC1101Duino device itself has diagnostic entities: whether the serial connection is up, when
+the last signal, last decoded signal and last unrecognized signal were received (the raw line,
+its RSSI and what it decoded to are in their attributes), the RSSI of the last signal, counters
+of received / decoded / unrecognized signals since startup, and the last status message from the
+firmware. The firmware prints `RX initialized F=<MHz>;M=<n>` when it starts, so that message shows
+which frequency it is listening on. The frequency is kept across restarts of the firmware.
+
 ### Events
 
 Decoded non-sensor signals, such as remote button presses, fire a `cc1101duino_signal` event:
