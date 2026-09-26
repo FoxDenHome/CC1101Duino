@@ -32,10 +32,10 @@ public:
 	//~BitStore();
 	bool addValue(byte value);
 	int8_t getValue(const uint16_t pos);
-	bool moveLeft(const uint16_t begin);
+	bool moveLeft(const int16_t begin);
 	bool changeValue(const uint16_t pos, byte value);
 
-	const uint16_t getSize();
+	uint16_t getSize();
 	//unsigned char *datastore;  // Reserve 40 Bytes for our store. Should be edited to aa dynamic way
 	unsigned char datastore[bufSize];
 	void reset();
@@ -200,16 +200,16 @@ bool BitStore<bufSize>::changeValue(const uint16_t pos, byte value)
 */
 
 template<uint8_t bufSize>
-const uint16_t BitStore<bufSize>::getSize()
+uint16_t BitStore<bufSize>::getSize()
 {
 	return valcount;
 }
 
 template<uint8_t bufSize>
-bool BitStore<bufSize>::moveLeft(const uint16_t begin)
+bool BitStore<bufSize>::moveLeft(const int16_t begin)
 {
-	if (begin == 0 || begin >= (uint16_t)valcount) return false;
-	if (begin == (uint16_t)valcount - 1)
+	if (begin == 0 || begin >= valcount) return false;
+	if (begin == valcount - 1)
 	 {
 		reset();
 		return true;

@@ -144,8 +144,8 @@ void initRxSystem() {
   Timer1.initialize(maxPulse);
   Timer1.attachInterrupt(timer1RxSystem);
 
-  signalDecoder.setRSSICallback(rssiCallback);
-  signalDecoder.setStreamCallback(writeCallback);
+  signalDecoder.setCallback(rssiCallback);
+  signalDecoder.setCallback(writeCallback);
   signalDecoder.MredEnabled = false;
   signalDecoder.MCenabled = true;
   signalDecoder.MSenabled = true;
