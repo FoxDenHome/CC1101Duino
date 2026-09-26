@@ -1,6 +1,7 @@
 {
   "domain": "cc1101duino",
   "name": "CC1101Duino",
+  "after_dependencies": ["usb"],
   "codeowners": ["@Doridian"],
   "config_flow": true,
   "dependencies": [],
@@ -10,5 +11,5 @@
   "issue_tracker": "https://github.com/FoxDenHome/CC1101Duino/issues",
   "loggers": ["serial_asyncio_fast"],
   "requirements": ["pyserial-asyncio-fast>=0.16"],
-  "version": "2.0.0"
+  "version": "2.1.0"
 }

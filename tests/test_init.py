@@ -11,6 +11,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 
+from custom_components.cc1101duino.config_flow import _list_ports
 from custom_components.cc1101duino.const import CONF_AUTOMATIC_ADD, DOMAIN, EVENT_SIGNAL
 
 LACROSSE_TEMP = "^SMU;P0=19800;P1=-1086;P2=1412;P3=618;P4=-8096;P5=164;P6=-552;D=0121212131213121212121212131313121212121213121312131213121313121213121312131213131213134565;CP=3;R=190;F=433.88;M=2;"
@@ -153,37 +154,133 @@ async def test_setup_retry_when_port_missing(hass: HomeAssistant) -> None:
     assert entry.state is ConfigEntryState.SETUP_RETRY
 
 
-async def test_config_flow(hass: HomeAssistant, fake_serial: FakeSerial) -> None:
-    with patch(
-        "custom_components.cc1101duino.config_flow._list_ports", return_value=["/dev/ttyUSB0"]
+BY_ID = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+
+
+def fake_by_id(device: str) -> str:
+    return BY_ID if device == "/dev/ttyUSB0" else device
+
+
+def test_list_ports() -> None:
+    usb_port = MagicMock(
+        device="/dev/ttyUSB0",
+        serial_number=None,
+        manufacturer="QinHeng Electronics",
+        description="USB Serial",
+        vid=0x1A86,
+        pid=0x7523,
+    )
+    legacy = MagicMock(device="/dev/ttyS0", vid=None, pid=None, description="n/a")
+    uart = MagicMock(
+        device="/dev/ttyAMA0",
+        serial_number=None,
+        manufacturer=None,
+        description="ttyAMA0",
+        vid=None,
+        pid=None,
+    )
+    with (
+        patch("serial.tools.list_ports.comports", return_value=[legacy, usb_port, uart]),
+        patch("homeassistant.components.usb.get_serial_by_id", side_effect=fake_by_id),
     ):
-        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
-        assert result["type"] == "form"
+        ports = _list_ports()
+    assert ports == [
+        {
+            "value": BY_ID,
+            "label": f"USB Serial - {BY_ID}, s/n: n/a - QinHeng Electronics - 1A86:7523",
+        },
+        {"value": "/dev/ttyAMA0", "label": "ttyAMA0 - /dev/ttyAMA0, s/n: n/a"},
+    ]
 
-        with patch(
-            "custom_components.cc1101duino.config_flow.async_open", AsyncMock(side_effect=OSError)
-        ):
-            result = await hass.config_entries.flow.async_configure(
-                result["flow_id"], {CONF_DEVICE: "/dev/ttyUSB0", CONF_AUTOMATIC_ADD: True}
-            )
-        assert result["errors"] == {"base": "cannot_connect"}
 
-        with patch(
-            "custom_components.cc1101duino.config_flow.async_open",
-            AsyncMock(return_value=(None, MagicMock())),
-        ):
-            result = await hass.config_entries.flow.async_configure(
-                result["flow_id"], {CONF_DEVICE: "socket://ser2net:2000", CONF_AUTOMATIC_ADD: False}
-            )
+@pytest.fixture
+def mock_ports():
+    with (
+        patch(
+            "custom_components.cc1101duino.config_flow._list_ports",
+            return_value=[{"value": BY_ID, "label": "USB Serial"}],
+        ),
+        patch("homeassistant.components.usb.get_serial_by_id", side_effect=fake_by_id),
+    ):
+        yield
+
+
+async def test_config_flow(hass: HomeAssistant, fake_serial: FakeSerial, mock_ports) -> None:
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    assert result["type"] == "form"
+
+    with patch(
+        "custom_components.cc1101duino.config_flow.async_open",
+        AsyncMock(side_effect=OSError),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICE: BY_ID, CONF_AUTOMATIC_ADD: True}
+        )
+    assert result["errors"] == {"base": "cannot_connect"}
+
+    with patch(
+        "custom_components.cc1101duino.config_flow.async_open",
+        AsyncMock(return_value=(None, MagicMock())),
+    ):
+        # A typed unstable path is stored as its /dev/serial/by-id path
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICE: "/dev/ttyUSB0", CONF_AUTOMATIC_ADD: False}
+        )
     assert result["type"] == "create_entry"
-    assert result["data"] == {CONF_DEVICE: "socket://ser2net:2000"}
+    assert result["data"] == {CONF_DEVICE: BY_ID}
     assert result["options"] == {CONF_AUTOMATIC_ADD: False}
     await hass.async_block_till_done()
 
     entry = hass.config_entries.async_entries(DOMAIN)[0]
+    assert entry.unique_id == BY_ID
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_AUTOMATIC_ADD: True}
     )
     assert result["type"] == "create_entry"
     assert entry.options == {CONF_AUTOMATIC_ADD: True}
+
+    # The same port cannot be added twice, whichever path is typed
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_DEVICE: "/dev/ttyUSB0", CONF_AUTOMATIC_ADD: True}
+    )
+    assert result["type"] == "abort"
+    assert result["reason"] == "already_configured"
+
+
+async def test_reconfigure(hass: HomeAssistant, fake_serial: FakeSerial, mock_ports) -> None:
+    entry = await setup_entry(hass)
+    other = MockConfigEntry(
+        domain=DOMAIN, unique_id="socket://other:2000", data={CONF_DEVICE: "socket://other:2000"}
+    )
+    other.add_to_hass(hass)
+
+    # Keeping the current port works although it is already open
+    result = await entry.start_reconfigure_flow(hass)
+    assert result["type"] == "form"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_DEVICE: "/dev/ttyFAKE"}
+    )
+    assert result["reason"] == "reconfigure_successful"
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_DEVICE: "socket://other:2000"}
+    )
+    assert result["reason"] == "already_configured"
+
+    result = await entry.start_reconfigure_flow(hass)
+    with patch(
+        "custom_components.cc1101duino.config_flow.async_open",
+        AsyncMock(return_value=(None, MagicMock())),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICE: "/dev/ttyUSB0"}
+        )
+    assert result["reason"] == "reconfigure_successful"
+    await hass.async_block_till_done()
+    assert entry.data == {CONF_DEVICE: BY_ID}
+    assert entry.unique_id == BY_ID
+    assert entry.title == BY_ID
+    assert entry.state is ConfigEntryState.LOADED

@@ -21,6 +21,9 @@ Manually: copy `custom_components/cc1101duino` into your Home Assistant `config/
 Then add the integration under *Settings → Devices & services*. The device can be a local serial
 port, or any [pyserial URL](https://pyserial.readthedocs.io/en/latest/url_handlers.html) such as
 `socket://host:2000` for a CC1101Duino behind ser2net.
+USB ports are stored by their stable `/dev/serial/by-id/...` path, so the device survives
+renumbering, and *Reconfigure* on the integration lets you move an existing setup to a different
+port without losing its sensors.
 
 ### Supported protocols
 

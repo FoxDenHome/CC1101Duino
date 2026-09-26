@@ -11,13 +11,23 @@
           "device": "Local serial port, or a pyserial URL such as socket://host:port for ser2net",
           "automatic_add": "Create entities for every sensor that is heard, including your neighbours'"
         }
+      },
+      "reconfigure": {
+        "title": "Change CC1101Duino port",
+        "data": {
+          "device": "Serial port"
+        },
+        "data_description": {
+          "device": "Local serial port, or a pyserial URL such as socket://host:port for ser2net"
+        }
       }
     },
     "error": {
       "cannot_connect": "Failed to open the serial port"
     },
     "abort": {
-      "already_configured": "This serial port is already configured"
+      "already_configured": "This serial port is already configured",
+      "reconfigure_successful": "Port changed"
     }
   },
   "options": {
