@@ -38,3 +38,30 @@ send_raw:
       example: "F433.92"
       selector:
         text:
+list_unknown_signals:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: cc1101duino
+classify_unknown_signal:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: cc1101duino
+    signal_id:
+      required: true
+      example: "3f9a1c02"
+      selector:
+        text:
+forget_unknown_signal:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: cc1101duino
+    signal_id:
+      example: "3f9a1c02"
+      selector:
+        text:

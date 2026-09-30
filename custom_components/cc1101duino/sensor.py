@@ -35,7 +35,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import CC1101DuinoConfigEntry
-from .const import DOMAIN, signal_diagnostics
+from .const import DOMAIN, signal_diagnostics, signal_unknown
 from .hub import HubDiagnostics, ReceivedSignal
 from .remote import RemoteEntity, async_setup_remote_entities
 
@@ -189,7 +189,10 @@ async def async_setup_entry(
 ) -> None:
     """Recreate previously seen sensors and add new ones as they are heard."""
     async_add_entities(
-        CC1101DuinoHubSensor(entry, description) for description in HUB_SENSOR_DESCRIPTIONS
+        [
+            *(CC1101DuinoHubSensor(entry, description) for description in HUB_SENSOR_DESCRIPTIONS),
+            CC1101DuinoUnknownSignalsSensor(entry),
+        ]
     )
 
     async_setup_remote_entities(
@@ -241,5 +244,38 @@ class CC1101DuinoHubSensor(SensorEntity):
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass, signal_diagnostics(self._hub.entry_id), self.async_write_ha_state
+            )
+        )
+
+
+class CC1101DuinoUnknownSignalsSensor(SensorEntity):
+    """How many types of unrecognized signals were heard, and what Claude made of them."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "unknown_signal_types"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _unrecorded_attributes = frozenset({"signal_types"})
+
+    def __init__(self, entry: CC1101DuinoConfigEntry) -> None:
+        hub = entry.runtime_data
+        assert hub.classifier is not None
+        self._classifier = hub.classifier
+        self._attr_unique_id = f"{entry.entry_id}-unknown_signal_types"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+
+    @property
+    def native_value(self) -> int:
+        return len(self._classifier.confirmed())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"signal_types": self._classifier.summary()}
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, signal_unknown(self._classifier.entry_id), self.async_write_ha_state
             )
         )

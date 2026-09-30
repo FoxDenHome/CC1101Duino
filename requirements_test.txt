@@ -2,3 +2,4 @@ pytest-homeassistant-custom-component
 pyserial-asyncio-fast
 # Imported through homeassistant.components.usb
 aiousbwatcher
+anthropic

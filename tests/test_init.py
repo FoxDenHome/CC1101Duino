@@ -8,13 +8,26 @@ from homeassistant.components.update import UpdateEntityFeature
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_DEVICE, STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 
+from custom_components.cc1101duino.claude import AuthenticationFailed, ClassificationError
 from custom_components.cc1101duino.config_flow import _list_ports
-from custom_components.cc1101duino.const import CONF_AUTOMATIC_ADD, DOMAIN, EVENT_SIGNAL
+from custom_components.cc1101duino.const import (
+    CONF_API_KEY,
+    CONF_AUTOMATIC_ADD,
+    CONF_CLASSIFY_AUTOMATICALLY,
+    CONF_MAX_CLASSIFICATIONS_PER_DAY,
+    CONF_MIN_TRANSMISSIONS,
+    CONF_MODEL,
+    DEFAULT_MAX_CLASSIFICATIONS_PER_DAY,
+    DEFAULT_MIN_TRANSMISSIONS,
+    DEFAULT_MODEL,
+    DOMAIN,
+    EVENT_SIGNAL,
+)
 from custom_components.cc1101duino.firmware import FlashError, load_firmware
 
 LACROSSE_TEMP = "^SMU;P0=19800;P1=-1086;P2=1412;P3=618;P4=-8096;P5=164;P6=-552;D=0121212131213121212121212131313121212121213121312131213121313121213121312131213131213134565;CP=3;R=190;F=433.88;M=2;"
@@ -362,10 +375,17 @@ async def test_config_flow(hass: HomeAssistant, fake_serial: FakeSerial, mock_po
     assert entry.unique_id == BY_ID
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_AUTOMATIC_ADD: True}
+        result["flow_id"], {CONF_AUTOMATIC_ADD: True, CONF_API_KEY: "sk-ant-test"}
     )
     assert result["type"] == "create_entry"
-    assert entry.options == {CONF_AUTOMATIC_ADD: True}
+    assert entry.options == {
+        CONF_AUTOMATIC_ADD: True,
+        CONF_API_KEY: "sk-ant-test",
+        CONF_MODEL: DEFAULT_MODEL,
+        CONF_CLASSIFY_AUTOMATICALLY: True,
+        CONF_MIN_TRANSMISSIONS: DEFAULT_MIN_TRANSMISSIONS,
+        CONF_MAX_CLASSIFICATIONS_PER_DAY: DEFAULT_MAX_CLASSIFICATIONS_PER_DAY,
+    }
 
     # The same port cannot be added twice, whichever path is typed
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
@@ -496,3 +516,218 @@ async def test_firmware_install(hass: HomeAssistant, fake_serial: FakeSerial) ->
         await hass.services.async_call("update", "install", {"entity_id": update}, blocking=True)
     await hass.async_block_till_done()
     assert hass.states.get(hub_entity(hass, entry, "binary_sensor", "connected")).state == STATE_ON
+
+
+def pwm_line(bits: str, short: int = 640, long: int = 1920, sync: int = -7040) -> str:
+    """A made-up PWM protocol that no decoder knows, sent three times after a sync gap."""
+    data = ("4" + "".join("21" if bit == "1" else "03" for bit in bits)) * 3
+    return f"^SMU;P0={short};P1=-{short};P2={long};P3=-{long};P4={sync};D={data};CP=0;R=200;F=433.92;M=2;"
+
+
+UNKNOWN_A = pwm_line("1011001110001111000010100101")
+UNKNOWN_B = pwm_line("1011001110001111000011110000")
+OTHER_UNKNOWN = pwm_line("1011001110001111000010100101", short=300, long=900, sync=-9000)
+
+CLASSIFICATION = {
+    "is_noise": False,
+    "category": "temperature_sensor",
+    "device": "Made-up sensor",
+    "protocol": "none",
+    "confidence": "medium",
+    "summary": "A PWM temperature sensor.",
+    "encoding": "PWM",
+    "packet_structure": "28 bits",
+    "decoded_samples": [],
+    "decoder_hint": "SignalPacketizerFixedVariable",
+    "model": "claude-opus-5-5",
+}
+
+
+@pytest.fixture
+def mock_classify():
+    with patch(
+        "custom_components.cc1101duino.classifier.async_classify",
+        AsyncMock(return_value=CLASSIFICATION),
+    ) as mock:
+        yield mock
+
+
+async def feed_at(hass: HomeAssistant, fake_serial: FakeSerial, freezer, line: str, delay: float):
+    freezer.tick(delay)
+    fake_serial.feed(line)
+    await hass.async_block_till_done()
+    # Classifying runs in background tasks
+    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        if tasks := list(entry.runtime_data.classifier._tasks.values()):
+            await asyncio.wait(tasks)
+    await hass.async_block_till_done()
+
+
+async def test_unknown_signal_classified_once(
+    hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
+) -> None:
+    entry = await setup_entry(hass, **{CONF_API_KEY: "sk-ant-test"})
+    events = async_capture_events(hass, "cc1101duino_unknown_signal_classified")
+    sensor = hub_entity(hass, entry, "sensor", "unknown_signal_types")
+
+    # Repeats within one transmission count once, noise is not collected at all
+    await feed_at(hass, fake_serial, freezer, UNKNOWN_A, 0)
+    await feed_at(hass, fake_serial, freezer, UNKNOWN_A, 0.5)
+    await feed_at(hass, fake_serial, freezer, NOISE, 0.5)
+    await feed_at(hass, fake_serial, freezer, UNKNOWN_B, 30)
+    assert hass.states.get(sensor).state == "0"
+    mock_classify.assert_not_called()
+
+    # The third transmission, with other data, has it classified
+    await feed_at(hass, fake_serial, freezer, UNKNOWN_B, 30)
+    mock_classify.assert_called_once()
+    _, model, record = mock_classify.call_args.args
+    assert model == DEFAULT_MODEL
+    assert record["transmissions"] == 3
+    assert record["count"] == 4
+    assert record["intervals"] == [30.5, 30.0]
+    assert [sample["line"] for sample in record["samples"]] == [UNKNOWN_A, UNKNOWN_B]
+
+    assert len(events) == 1
+    assert events[0].data["device"] == "Made-up sensor"
+    assert events[0].data["config_entry_id"] == entry.entry_id
+    state = hass.states.get(sensor)
+    assert state.state == "1"
+    assert state.attributes["signal_types"][0]["status"] == "classified"
+    assert state.attributes["signal_types"][0]["device"] == "Made-up sensor"
+
+    # Once determined, the same kind of signal is never sent again, also after a reload
+    await feed_at(hass, fake_serial, freezer, UNKNOWN_A, 30)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    await feed_at(hass, fake_serial, freezer, UNKNOWN_B, 30)
+    assert mock_classify.call_count == 1
+
+    response = await hass.services.async_call(
+        DOMAIN, "list_unknown_signals", {}, blocking=True, return_response=True
+    )
+    (listed,) = response["signals"]
+    assert listed["transmissions"] == 5
+    assert listed["result"]["summary"] == "A PWM temperature sensor."
+
+    # A signal with other timings is a new type
+    for _ in range(3):
+        await feed_at(hass, fake_serial, freezer, OTHER_UNKNOWN, 30)
+    assert mock_classify.call_count == 2
+
+
+async def test_unknown_signal_daily_limit(
+    hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
+) -> None:
+    await setup_entry(
+        hass,
+        **{CONF_API_KEY: "sk-ant-test", CONF_MAX_CLASSIFICATIONS_PER_DAY: 1},
+    )
+    for line in (UNKNOWN_A, OTHER_UNKNOWN) * 3:
+        await feed_at(hass, fake_serial, freezer, line, 10)
+    assert mock_classify.call_count == 1
+
+    # Waits for the next reception after a day
+    freezer.tick(86400)
+    await feed_at(hass, fake_serial, freezer, OTHER_UNKNOWN, 10)
+    assert mock_classify.call_count == 2
+
+
+async def test_unknown_signal_without_api_key(
+    hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
+) -> None:
+    await setup_entry(hass)
+    for _ in range(3):
+        await feed_at(hass, fake_serial, freezer, UNKNOWN_A, 10)
+    mock_classify.assert_not_called()
+
+    # Still collected, to be listed
+    response = await hass.services.async_call(
+        DOMAIN, "list_unknown_signals", {}, blocking=True, return_response=True
+    )
+    (listed,) = response["signals"]
+    assert listed["status"] == "collecting"
+    with pytest.raises(ServiceValidationError, match="API key"):
+        await hass.services.async_call(
+            DOMAIN,
+            "classify_unknown_signal",
+            {"signal_id": listed["id"]},
+            blocking=True,
+            return_response=True,
+        )
+
+
+async def test_unknown_signal_retry(
+    hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
+) -> None:
+    await setup_entry(hass, **{CONF_API_KEY: "sk-ant-test"})
+    mock_classify.side_effect = ClassificationError("overloaded")
+    for _ in range(4):
+        await feed_at(hass, fake_serial, freezer, UNKNOWN_A, 10)
+    assert mock_classify.call_count == 1
+
+    # Retried with the next reception an hour later
+    mock_classify.side_effect = None
+    freezer.tick(3600)
+    await feed_at(hass, fake_serial, freezer, UNKNOWN_A, 10)
+    assert mock_classify.call_count == 2
+    response = await hass.services.async_call(
+        DOMAIN, "list_unknown_signals", {}, blocking=True, return_response=True
+    )
+    assert response["signals"][0]["status"] == "classified"
+
+
+async def test_unknown_signal_bad_api_key(
+    hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
+) -> None:
+    await setup_entry(hass, **{CONF_API_KEY: "sk-ant-test"})
+    mock_classify.side_effect = AuthenticationFailed("Anthropic rejected the API key")
+    for line in (UNKNOWN_A, OTHER_UNKNOWN) * 3:
+        await feed_at(hass, fake_serial, freezer, line, 10)
+    # Stops trying rather than failing for every signal type
+    assert mock_classify.call_count == 1
+
+
+async def test_unknown_signal_services(
+    hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
+) -> None:
+    await setup_entry(hass, **{CONF_API_KEY: "sk-ant-test", CONF_CLASSIFY_AUTOMATICALLY: False})
+    for _ in range(3):
+        await feed_at(hass, fake_serial, freezer, UNKNOWN_A, 10)
+    mock_classify.assert_not_called()
+
+    response = await hass.services.async_call(
+        DOMAIN, "list_unknown_signals", {}, blocking=True, return_response=True
+    )
+    signal_id = response["signals"][0]["id"]
+    response = await hass.services.async_call(
+        DOMAIN,
+        "classify_unknown_signal",
+        {"signal_id": signal_id},
+        blocking=True,
+        return_response=True,
+    )
+    assert response["result"]["device"] == "Made-up sensor"
+    mock_classify.assert_called_once()
+
+    mock_classify.side_effect = ClassificationError("overloaded")
+    with pytest.raises(HomeAssistantError, match="overloaded"):
+        await hass.services.async_call(
+            DOMAIN,
+            "classify_unknown_signal",
+            {"signal_id": signal_id},
+            blocking=True,
+            return_response=True,
+        )
+
+    await hass.services.async_call(
+        DOMAIN, "forget_unknown_signal", {"signal_id": signal_id}, blocking=True
+    )
+    response = await hass.services.async_call(
+        DOMAIN, "list_unknown_signals", {}, blocking=True, return_response=True
+    )
+    assert response["signals"] == []
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "forget_unknown_signal", {"signal_id": signal_id}, blocking=True
+        )

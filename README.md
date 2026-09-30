@@ -84,6 +84,30 @@ of received / decoded / unrecognized signals since startup, and the last status 
 firmware. The firmware prints `RX initialized F=<MHz>;M=<n>` when it starts, so that message shows
 which frequency it is listening on. The frequency is kept across restarts of the firmware.
 
+### Unknown signals
+
+Signals that no protocol decodes are grouped into *signal types* by their pulse timings, the
+frequency, and the packet length. Those stay the same whatever a device transmits, so every
+reading of one sensor, or every button of one model of remote, is one type. A type counts once
+it has been heard in three separate transmissions, which keeps out noise. The *Unknown signal
+types* diagnostic sensor shows how many types there are, with a short summary of each in its
+attributes. `cc1101duino.list_unknown_signals` returns all of them with their sample lines, the
+times between transmissions, and what Claude made of them.
+
+With an [Anthropic API key](https://platform.claude.com/settings/keys) in the integration
+options, each new type is sent to Claude, with code execution so that it can demodulate the
+samples. Claude reports what kind of device the type most likely comes from, its encoding and
+packet layout, the decoded samples, and hints for writing a decoder. The result fires a
+`cc1101duino_unknown_signal_classified` event and shows up as a notification, unless Claude
+found it to be noise. Each type is sent only once. Similar signals heard later, also after
+restarts, are matched to the stored result and not sent again. A failed request is retried at
+most three times, an hour apart and then longer. A rejected API key stops automatic
+classification until the options are changed. The options also set the model (Claude Opus 5.5 by
+default), how many transmissions a type needs before it is sent, and how many types are sent in
+24 hours at most (10). With *Classify unknown signals automatically* turned off, signals are only
+sent through `cc1101duino.classify_unknown_signal`, which also re-classifies a type.
+`cc1101duino.forget_unknown_signal` forgets one type, or all of them.
+
 ### Firmware updates
 
 The *Firmware* update entity of the CC1101Duino device shows the firmware version the device
@@ -143,7 +167,10 @@ data:
 | `V` | Report the firmware version |
 | `S;F=..;M=..;R=..;S=..;P0=..;D=..;` | Transmit pulses, as in [SIGNALDuino `SR`](https://github.com/RFD-FHEM/SIGNALDuino/wiki/Commands#sendraw--sr), plus `F` frequency, `M` modulation, `S` spacing between repeats (µs) |
 
-If more than one CC1101Duino is set up, pass `config_entry_id` to either service.
+`cc1101duino.list_unknown_signals`, `cc1101duino.classify_unknown_signal` and
+`cc1101duino.forget_unknown_signal` work with [unknown signals](#unknown-signals).
+
+If more than one CC1101Duino is set up, pass `config_entry_id` to any of the services.
 
 ### Adding a protocol
 

@@ -34,7 +34,19 @@
     "step": {
       "init": {
         "data": {
-          "automatic_add": "Automatically add new sensors"
+          "automatic_add": "Automatically add new sensors",
+          "api_key": "Anthropic API key",
+          "model": "Claude model",
+          "classify_automatically": "Classify unknown signals automatically",
+          "min_transmissions": "Transmissions before classifying",
+          "max_classifications_per_day": "Classifications per day"
+        },
+        "data_description": {
+          "api_key": "Lets Claude work out what kind of device unrecognized signals come from. Leave empty to only collect them.",
+          "model": "Model ID to classify with, e.g. claude-opus-5-5 or the cheaper claude-sonnet-5-5",
+          "classify_automatically": "Send each new type of unknown signal to Claude once it was heard often enough; otherwise only with the classify_unknown_signal action",
+          "min_transmissions": "Separate transmissions a signal type must be heard in before it is sent, which keeps noise from being sent",
+          "max_classifications_per_day": "At most this many signal types are sent to Claude automatically in 24 hours"
         }
       }
     }
@@ -88,6 +100,9 @@
       },
       "uv_index": {
         "name": "UV index"
+      },
+      "unknown_signal_types": {
+        "name": "Unknown signal types"
       }
     }
   },
@@ -125,6 +140,44 @@
         "line": {
           "name": "Command",
           "description": "Command line without the leading ^, e.g. F433.92 to change the receive frequency."
+        }
+      }
+    },
+    "list_unknown_signals": {
+      "name": "List unknown signals",
+      "description": "List the types of unrecognized signals heard often enough not to be noise, with their samples and what Claude made of them.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Device",
+          "description": "CC1101Duino to list for. Only needed if more than one is set up."
+        }
+      }
+    },
+    "classify_unknown_signal": {
+      "name": "Classify unknown signal",
+      "description": "Ask Claude now what kind of device a type of unknown signal comes from, even if it was classified before.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Device",
+          "description": "CC1101Duino the signal was heard by. Only needed if more than one is set up."
+        },
+        "signal_id": {
+          "name": "Signal type",
+          "description": "ID of the signal type, as listed by list_unknown_signals."
+        }
+      }
+    },
+    "forget_unknown_signal": {
+      "name": "Forget unknown signal",
+      "description": "Forget a type of unknown signal and what Claude made of it, so it is collected and classified again.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Device",
+          "description": "CC1101Duino the signal was heard by. Only needed if more than one is set up."
+        },
+        "signal_id": {
+          "name": "Signal type",
+          "description": "ID of the signal type. Forgets all of them if left out."
         }
       }
     }

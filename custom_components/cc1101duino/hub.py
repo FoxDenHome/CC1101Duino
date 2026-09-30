@@ -9,6 +9,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import serial
 import serial_asyncio_fast
@@ -34,6 +35,9 @@ from .const import (
 )
 from .firmware import FlashError, can_flash, flash
 from .protocol import LineCoder, NotSupportedError, Signal
+
+if TYPE_CHECKING:
+    from .classifier import UnknownSignalClassifier
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,6 +105,7 @@ class CC1101DuinoHub:
         self.connected = False
         self.firmware_version: str | None = None
         self.diagnostics = HubDiagnostics()
+        self.classifier: UnknownSignalClassifier | None = None
         # SIGNALduino sensors confirmed by a second reception, and when others were first heard
         self._confirmed: set[tuple[str, str]] = set()
         self._sightings: dict[tuple[str, str], float] = {}
@@ -279,6 +284,8 @@ class CC1101DuinoHub:
             _LOGGER.debug("Unrecognized: %s", received.line)
             diag.unrecognized += 1
             diag.last_unrecognized = received
+            if self.classifier is not None:
+                self.classifier.async_add(received)
         async_dispatcher_send(self.hass, signal_diagnostics(self.entry_id))
 
     async def async_send_signal(self, signal: Signal) -> None:

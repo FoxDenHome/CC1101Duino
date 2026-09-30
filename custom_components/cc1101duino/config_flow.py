@@ -20,13 +20,30 @@ from homeassistant.const import CONF_DEVICE
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
-from .const import CONF_AUTOMATIC_ADD, DOMAIN
+from .const import (
+    CONF_API_KEY,
+    CONF_AUTOMATIC_ADD,
+    CONF_CLASSIFY_AUTOMATICALLY,
+    CONF_MAX_CLASSIFICATIONS_PER_DAY,
+    CONF_MIN_TRANSMISSIONS,
+    CONF_MODEL,
+    DEFAULT_MAX_CLASSIFICATIONS_PER_DAY,
+    DEFAULT_MIN_TRANSMISSIONS,
+    DEFAULT_MODEL,
+    DOMAIN,
+)
 from .hub import async_open
 
 _LOGGER = logging.getLogger(__name__)
@@ -145,7 +162,26 @@ class CC1101DuinoOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
-        schema = vol.Schema({vol.Required(CONF_AUTOMATIC_ADD): BooleanSelector()})
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_AUTOMATIC_ADD): BooleanSelector(),
+                vol.Optional(CONF_API_KEY): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
+                vol.Optional(CONF_MODEL, default=DEFAULT_MODEL): TextSelector(),
+                vol.Optional(CONF_CLASSIFY_AUTOMATICALLY, default=True): BooleanSelector(),
+                vol.Optional(
+                    CONF_MIN_TRANSMISSIONS, default=DEFAULT_MIN_TRANSMISSIONS
+                ): NumberSelector(
+                    NumberSelectorConfig(min=1, max=100, mode=NumberSelectorMode.BOX)
+                ),
+                vol.Optional(
+                    CONF_MAX_CLASSIFICATIONS_PER_DAY, default=DEFAULT_MAX_CLASSIFICATIONS_PER_DAY
+                ): NumberSelector(
+                    NumberSelectorConfig(min=0, max=1000, mode=NumberSelectorMode.BOX)
+                ),
+            }
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(

@@ -5,6 +5,15 @@ from typing import Final
 DOMAIN: Final = "cc1101duino"
 
 CONF_AUTOMATIC_ADD: Final = "automatic_add"
+CONF_API_KEY: Final = "api_key"
+CONF_MODEL: Final = "model"
+CONF_CLASSIFY_AUTOMATICALLY: Final = "classify_automatically"
+CONF_MAX_CLASSIFICATIONS_PER_DAY: Final = "max_classifications_per_day"
+CONF_MIN_TRANSMISSIONS: Final = "min_transmissions"
+
+DEFAULT_MODEL: Final = "claude-opus-5-5"
+DEFAULT_MAX_CLASSIFICATIONS_PER_DAY: Final = 10
+DEFAULT_MIN_TRANSMISSIONS: Final = 3
 
 BAUDRATE: Final = 115200
 RECONNECT_INTERVAL: Final = 10
@@ -24,13 +33,18 @@ AUTOCREATE_WINDOW: Final = 180
 AUTOCREATE_MIN_GAP: Final = 2
 
 EVENT_SIGNAL: Final = f"{DOMAIN}_signal"
+EVENT_UNKNOWN_SIGNAL_CLASSIFIED: Final = f"{DOMAIN}_unknown_signal_classified"
 
 SERVICE_SEND_SIGNAL: Final = "send_signal"
 SERVICE_SEND_RAW: Final = "send_raw"
+SERVICE_LIST_UNKNOWN_SIGNALS: Final = "list_unknown_signals"
+SERVICE_CLASSIFY_UNKNOWN_SIGNAL: Final = "classify_unknown_signal"
+SERVICE_FORGET_UNKNOWN_SIGNAL: Final = "forget_unknown_signal"
 
 ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
 ATTR_CODER: Final = "coder"
 ATTR_LINE: Final = "line"
+ATTR_SIGNAL_ID: Final = "signal_id"
 
 
 def signal_decoded(entry_id: str) -> str:
@@ -46,3 +60,8 @@ def signal_connection(entry_id: str) -> str:
 def signal_diagnostics(entry_id: str) -> str:
     """Dispatcher signal sent when the hub's diagnostics change."""
     return f"{DOMAIN}_diagnostics_{entry_id}"
+
+
+def signal_unknown(entry_id: str) -> str:
+    """Dispatcher signal sent when the unknown signal types of a config entry change."""
+    return f"{DOMAIN}_unknown_{entry_id}"
