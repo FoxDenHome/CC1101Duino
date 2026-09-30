@@ -149,37 +149,71 @@ class SignalPacketizerPulseDistance(SignalPacketizer):
 
     Packets start after a long sync gap. A packet that ends the transmission loses its last
     bit, as the gap after it merges into the silence, so it comes out one bit short.
+
+    Weak receptions are often cut short, or start in the middle of a packet. A transmission
+    repeats one packet, so with ``packet_bits`` set, the end of one repeat (the bits before a
+    sync gap) and the start of another (the bits after one) are joined into a whole packet.
     """
 
     min_len = 5
+    packet_bits: int | None = None
     pulse: NumberRange = NUMBER_RANGE_ZERO
     zero_gap: NumberRange = NUMBER_RANGE_ZERO
     one_gap: NumberRange = NUMBER_RANGE_ZERO
     sync_gap: NumberRange = NUMBER_RANGE_ZERO
 
     def unpack(self, raw_signal: RawSignal) -> list[BinarySignal]:
-        collector = _SignalCollector(self.min_len)
-        # Only bits after a sync gap count, so a packet heard halfway is not misaligned
+        # Runs of bits, whether they follow a sync gap, and whether a sync gap ends them
+        runs: list[tuple[list[int], bool, bool]] = []
+        current: list[int] = []
         synced = False
+
+        def end_run(before_sync: bool) -> None:
+            nonlocal current
+            if current:
+                runs.append((current, synced, before_sync))
+            current = []
 
         for timing in raw_signal.timings:
             if timing > 0:
                 if not _matches(self.pulse, timing):
-                    collector.flush()
+                    end_run(False)
                     synced = False
             elif _matches(self.sync_gap, timing):
-                collector.flush()
+                end_run(True)
                 synced = True
-            elif synced and _matches(self.zero_gap, timing):
-                collector.current.append(0)
-            elif synced and _matches(self.one_gap, timing):
-                collector.current.append(1)
+            elif _matches(self.zero_gap, timing):
+                current.append(0)
+            elif _matches(self.one_gap, timing):
+                current.append(1)
             else:
-                collector.flush()
+                end_run(False)
                 synced = False
-        collector.flush()
+        end_run(False)
 
-        return collector.signals
+        # Only runs after a sync gap count on their own, so a packet heard halfway is not misaligned
+        packets = [bits for bits, after_sync, _ in runs if after_sync and len(bits) >= self.min_len]
+        if self.packet_bits is not None:
+            size = self.packet_bits
+            starts = [
+                bits for bits, after_sync, before_sync in runs if after_sync and not before_sync
+            ]
+            ends = [
+                bits for bits, after_sync, before_sync in runs if before_sync and not after_sync
+            ]
+            for start in starts:
+                for end in ends:
+                    overlap = len(start) + len(end) - size
+                    if len(start) >= size or len(end) >= size or overlap < 0:
+                        continue
+                    # Where both have the same bits of the packet, they must agree
+                    if start[size - len(end) :] != end[:overlap]:
+                        continue
+                    joined = start + end[overlap:]
+                    if joined not in packets:
+                        packets.append(joined)
+
+        return [BinarySignal(bits) for bits in packets]
 
 
 def _matches(expected: NumberRange, timing: int) -> bool:
@@ -199,7 +233,9 @@ class MinkaAirePacketizer(SignalPacketizerOnOffBit):
 
 
 class NexusPacketizer(SignalPacketizerPulseDistance):
-    min_len = 35
+    # Up to the constant nibble, enough for the temperature
+    min_len = 28
+    packet_bits = 36
     pulse = NumberRange(500, 250)
     zero_gap = NumberRange(-1000, 300)
     one_gap = NumberRange(-2000, 400)

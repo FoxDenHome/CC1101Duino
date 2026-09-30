@@ -89,7 +89,9 @@ which frequency it is listening on. The frequency is kept across restarts of the
 Signals that no protocol decodes are grouped into *signal types* by their pulse timings, the
 frequency, and the packet length. Those stay the same whatever a device transmits, so every
 reading of one sensor, or every button of one model of remote, is one type. A type counts once
-it has been heard in three separate transmissions, which keeps out noise. The *Unknown signal
+it has been heard in three separate transmissions, which keeps out noise. Receptions cut short
+still count toward the type they are part of, and signals that look like ones a protocol did
+decode, such as a weak reception of a known sensor, are left out. The *Unknown signal
 types* diagnostic sensor shows how many types there are, with a short summary of each in its
 attributes. `cc1101duino.list_unknown_signals` returns all of them with their sample lines, the
 times between transmissions, and what Claude made of them.

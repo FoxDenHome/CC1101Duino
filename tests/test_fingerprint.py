@@ -43,6 +43,22 @@ def test_different_devices() -> None:
     assert oregon.pulses == (493,)
 
 
+def test_cut_short() -> None:
+    # A Lacrosse packet cut off by the end of the reception
+    packet = LACROSSE.split("D=0")[1].split("4565;")[0]
+    full = fingerprint(LACROSSE)
+    cut = fingerprint(LACROSSE.replace(packet + "4565", packet[:30]))
+    assert not full.partial
+    assert cut.partial
+    assert cut.length < full.length
+    assert cut.similar(full)
+    assert full.similar(cut)
+    # A whole packet much shorter is another kind of device
+    other = fingerprint(LACROSSE.replace(packet, packet[:30]))
+    assert not other.partial
+    assert not other.similar(full)
+
+
 def test_other_frequency() -> None:
     assert not fingerprint(IT_REMOTE).similar(fingerprint(IT_REMOTE.replace("433.92", "868.35")))
 

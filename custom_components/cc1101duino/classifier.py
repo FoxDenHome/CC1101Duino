@@ -55,6 +55,8 @@ RETRY_DELAY = 3600
 DAY = 86400
 # Types listed in the sensor's attributes
 MAX_SUMMARY = 20
+# Fingerprints of decoded signals, whose look-alikes are parts of them that did not decode
+MAX_KNOWN = 50
 
 STATUS_COLLECTING = "collecting"
 STATUS_CLASSIFYING = "classifying"
@@ -71,6 +73,8 @@ class UnknownSignalClassifier:
 
     A type is only sent after it was heard in several separate transmissions, so noise that
     never repeats costs nothing, and once classified (even as noise) it is never sent again.
+    Signals that look like ones a decoder recognized, such as a weak reception of a known
+    sensor that was cut short, are not collected at all.
     """
 
     def __init__(self, hass: HomeAssistant, entry_id: str, options: Mapping[str, Any]) -> None:
@@ -86,7 +90,9 @@ class UnknownSignalClassifier:
             options.get(CONF_MIN_TRANSMISSIONS, DEFAULT_MIN_TRANSMISSIONS)
         )
         self.records: dict[str, dict[str, Any]] = {}
-        self._fingerprints: dict[str, Fingerprint] = {}
+        # Of each type's first line and its samples, which vary as receptions get cut short
+        self._fingerprints: dict[str, list[Fingerprint]] = {}
+        self._known: list[Fingerprint] = []
         # When classifications were requested, for the daily limit
         self._requested: list[float] = []
         self._store: Store[dict[str, Any]] = Store(
@@ -100,11 +106,14 @@ class UnknownSignalClassifier:
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
         self._requested = data.get("requested", [])
+        self._known = [Fingerprint.from_dict(known) for known in data.get("known", [])]
         for record in data.get("signals", []):
             if record["status"] == STATUS_CLASSIFYING:
                 record["status"] = STATUS_COLLECTING
             self.records[record["id"]] = record
-            self._fingerprints[record["id"]] = Fingerprint.from_dict(record["fingerprint"])
+            self._fingerprints[record["id"]] = [Fingerprint.from_dict(record["fingerprint"])]
+            for sample in record["samples"]:
+                self._add_fingerprint(record["id"], Fingerprint.from_line(sample["line"]))
 
     async def async_unload(self) -> None:
         tasks = list(self._tasks.values())
@@ -115,7 +124,37 @@ class UnknownSignalClassifier:
         await self._store.async_save(self._data())
 
     def _data(self) -> dict[str, Any]:
-        return {"requested": self._requested, "signals": list(self.records.values())}
+        return {
+            "requested": self._requested,
+            "known": [known.as_dict() for known in self._known],
+            "signals": list(self.records.values()),
+        }
+
+    def _add_fingerprint(self, signal_id: str, fingerprint: Fingerprint | None) -> None:
+        fingerprints = self._fingerprints[signal_id]
+        if fingerprint is not None and fingerprint not in fingerprints:
+            fingerprints.append(fingerprint)
+
+    def _is_known(self, fingerprint: Fingerprint) -> bool:
+        return any(known.similar(fingerprint) for known in self._known)
+
+    @callback
+    def async_add_decoded(self, received: ReceivedSignal) -> None:
+        """Note a signal a decoder recognized, so that look-alikes are not classified."""
+        fingerprint = Fingerprint.from_line(received.line)
+        # A partial reception's length says little, it would hide unknown types of any length
+        if fingerprint is None or fingerprint.partial or self._is_known(fingerprint):
+            return
+        self._known = [*self._known, fingerprint][-MAX_KNOWN:]
+        # Drop types collected so far that turn out to be this signal, unless already classified
+        for signal_id, record in list(self.records.items()):
+            if (
+                record["status"] in (STATUS_COLLECTING, STATUS_FAILED)
+                and signal_id not in self._tasks
+                and any(fingerprint.similar(other) for other in self._fingerprints[signal_id])
+            ):
+                self._remove(signal_id)
+        self._changed()
 
     @callback
     def _changed(self) -> None:
@@ -126,10 +165,14 @@ class UnknownSignalClassifier:
     def async_add(self, received: ReceivedSignal) -> None:
         """Note an unrecognized signal, and classify its type once it was heard often enough."""
         fingerprint = Fingerprint.from_line(received.line)
-        if fingerprint is None:
+        if fingerprint is None or self._is_known(fingerprint):
             return
         signal_id = next(
-            (sid for sid, other in self._fingerprints.items() if other.similar(fingerprint)),
+            (
+                sid
+                for sid, others in self._fingerprints.items()
+                if any(other.similar(fingerprint) for other in others)
+            ),
             None,
         )
         now = received.time.isoformat()
@@ -153,7 +196,7 @@ class UnknownSignalClassifier:
                 "attempts": 0,
                 "last_attempt": None,
             }
-            self._fingerprints[signal_id] = fingerprint
+            self._fingerprints[signal_id] = [fingerprint]
         else:
             record = self.records[signal_id]
             last_seen = dt_util.parse_datetime(record["last_seen"])
@@ -171,6 +214,7 @@ class UnknownSignalClassifier:
                 and (gap >= AUTOCREATE_MIN_GAP or len(samples) < 2)
             ):
                 samples.append(sample)
+                self._add_fingerprint(signal_id, fingerprint)
 
         if self._should_classify(self.records[signal_id]):
             self._start(signal_id)

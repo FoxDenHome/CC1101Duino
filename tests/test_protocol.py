@@ -87,6 +87,37 @@ def test_nexus_negative_temperature(coder: LineCoder) -> None:
     ]
 
 
+def nexus_line(data: str) -> str:
+    return f"^SMU;P0=500;P1=-1000;P2=-2000;P3=-4000;D={data};CP=0;R=170;F=433.92;M=2;"
+
+
+def nexus_pulses(bits: str) -> str:
+    return "".join("02" if bit == "1" else "01" for bit in bits)
+
+
+# ID 180, battery ok, channel 2, 13.1 °C, 83 %
+NEXUS_WEAK_BITS = f"{180:08b}" + "1001" + f"{131:012b}" + "1111" + f"{83:08b}"
+
+
+def test_nexus_cut_short_has_temperature_only(coder: LineCoder) -> None:
+    line = nexus_line("03" + nexus_pulses(NEXUS_WEAK_BITS[:31]))
+    assert coder.process_signal_line(line) == [nexus("temperature", "°C", 13.1)]
+
+
+def test_nexus_joins_end_and_start_of_repeats(coder: LineCoder) -> None:
+    # Heard from the middle of one repeat, and cut off in the next
+    tail, head = NEXUS_WEAK_BITS[12:], NEXUS_WEAK_BITS[:31]
+    line = nexus_line(nexus_pulses(tail) + "03" + nexus_pulses(head))
+    assert coder.process_signal_line(line) == [
+        nexus("temperature", "°C", 13.1),
+        nexus("humidity", "%", 83),
+    ]
+    # Unless where they overlap they disagree
+    corrupt = tail[:5] + ("0" if tail[5] == "1" else "1") + tail[6:]
+    line = nexus_line(nexus_pulses(corrupt) + "03" + nexus_pulses(head))
+    assert coder.process_signal_line(line) == [nexus("temperature", "°C", 13.1)]
+
+
 @pytest.mark.parametrize(
     "line",
     [

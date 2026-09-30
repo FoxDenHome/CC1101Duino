@@ -58,6 +58,9 @@ class Fingerprint:
     pulses: tuple[int, ...]
     # Longest run of significant pulses, i.e. the length of one packet between sync marks
     length: int
+    # Whether every run that long was cut off by the start or end of the reception, which makes
+    # the length only a lower bound; weak receptions often hold only part of a packet
+    partial: bool = False
 
     @classmethod
     def from_line(cls, line: str) -> Fingerprint | None:
@@ -95,8 +98,15 @@ class Fingerprint:
         if not 2 <= len(significant) <= MAX_SIGNIFICANT_PULSES:
             return None
         pulses = tuple(sorted(timings[index] for index in significant))
-        length = max(len(run) for run in re.split(f"[^{''.join(significant)}]", data))
-        return cls("pulse", frequency, modulation, pulses, length)
+        runs = [
+            (match.start(), match.end())
+            for match in re.finditer(f"[{''.join(significant)}]+", data)
+        ]
+        length = max(end - start for start, end in runs)
+        partial = all(
+            start == 0 or end == len(data) for start, end in runs if end - start == length
+        )
+        return cls("pulse", frequency, modulation, pulses, length, partial)
 
     def similar(self, other: Fingerprint) -> bool:
         return (
@@ -105,8 +115,15 @@ class Fingerprint:
             and abs(self.frequency - other.frequency) <= FREQUENCY_TOLERANCE_MHZ
             and _covered(self.pulses, other.pulses)
             and _covered(other.pulses, self.pulses)
-            and abs(self.length - other.length)
-            <= max(LENGTH_TOLERANCE, LENGTH_TOLERANCE_SHARE * max(self.length, other.length))
+            and self._length_matches(other)
+        )
+
+    def _length_matches(self, other: Fingerprint) -> bool:
+        shorter, longer = sorted((self, other), key=lambda fingerprint: fingerprint.length)
+        if shorter.partial:
+            return True
+        return longer.length - shorter.length <= max(
+            LENGTH_TOLERANCE, LENGTH_TOLERANCE_SHARE * longer.length
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -116,6 +133,7 @@ class Fingerprint:
             "modulation": self.modulation,
             "pulses": list(self.pulses),
             "length": self.length,
+            "partial": self.partial,
         }
 
     @classmethod
@@ -126,4 +144,5 @@ class Fingerprint:
             data["modulation"],
             tuple(data["pulses"]),
             data["length"],
+            data.get("partial", False),
         )

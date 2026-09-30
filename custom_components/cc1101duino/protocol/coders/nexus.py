@@ -7,6 +7,8 @@ from ..signal import BinarySignal, Modulation, NumberRange
 from .base import Signal, SignalCoder
 
 PACKET_BITS = 36
+# Up to the constant nibble, enough for the temperature
+MIN_BITS = 28
 CONSTANT = 0b1111
 
 
@@ -20,8 +22,9 @@ class NexusSignalCoder(SignalCoder):
     modulation = Modulation.ASK_OOK
 
     def decode_internal(self, signal: BinarySignal) -> list[Signal] | None:
-        # The last packet of a transmission is one bit short, see SignalPacketizerPulseDistance
-        if len(signal.bits) not in (PACKET_BITS - 1, PACKET_BITS):
+        # The last packet of a transmission is one bit short, see SignalPacketizerPulseDistance,
+        # and weak receptions may be cut off anywhere
+        if not MIN_BITS <= len(signal.bits) <= PACKET_BITS:
             return None
 
         sensor_id = str(signal.read_number_msb_first(8))
@@ -34,7 +37,7 @@ class NexusSignalCoder(SignalCoder):
 
         results = [self._make_signal("temperature", sensor_id, "°C", temperature / 10)]
 
-        # Humidity's lowest bit is lost in a short packet, so it is only reported from full ones
+        # Humidity is only reported from full packets, a short one lacks some of its bits
         if len(signal.bits) == PACKET_BITS:
             humidity = signal.read_number_msb_first(8)
             if humidity > 100:

@@ -280,6 +280,8 @@ class CC1101DuinoHub:
         if received.signals:
             diag.decoded += 1
             diag.last_decoded = received
+            if self.classifier is not None:
+                self.classifier.async_add_decoded(received)
         else:
             _LOGGER.debug("Unrecognized: %s", received.line)
             diag.unrecognized += 1

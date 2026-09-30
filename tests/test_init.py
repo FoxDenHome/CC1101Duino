@@ -616,6 +616,52 @@ async def test_unknown_signal_classified_once(
     assert mock_classify.call_count == 2
 
 
+def cut_short(line: str, pulses: int) -> str:
+    """The line with only the start of its first packet, as a weak reception can be."""
+    data = line.split(";D=")[1].split(";")[0]
+    return line.replace(data, data[: 1 + pulses])
+
+
+async def test_unknown_signal_cut_short_classified_once(
+    hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
+) -> None:
+    await setup_entry(hass, **{CONF_API_KEY: "sk-ant-test"})
+    await feed_at(hass, fake_serial, freezer, cut_short(UNKNOWN_A, 20), 0)
+    await feed_at(hass, fake_serial, freezer, UNKNOWN_B, 30)
+    await feed_at(hass, fake_serial, freezer, cut_short(UNKNOWN_B, 36), 30)
+    await feed_at(hass, fake_serial, freezer, cut_short(UNKNOWN_A, 44), 30)
+    mock_classify.assert_called_once()
+    _, _, record = mock_classify.call_args.args
+    assert record["transmissions"] == 3
+
+
+def nexus_line(bits: str, sync: bool = True) -> str:
+    data = ("03" if sync else "") + "".join("02" if bit == "1" else "01" for bit in bits)
+    return f"^SMU;P0=500;P1=-1000;P2=-2000;P3=-4000;D={data}03;CP=0;R=170;F=433.92;M=2;"
+
+
+NEXUS_BITS = f"{180:08b}" + "1001" + f"{131:012b}" + "1111" + f"{83:08b}"
+
+
+async def test_unknown_signal_like_decoded_not_classified(
+    hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
+) -> None:
+    entry = await setup_entry(hass, **{CONF_API_KEY: "sk-ant-test"})
+    sensor = hub_entity(hass, entry, "sensor", "unknown_signal_types")
+    # Parts of Nexus packets that do not decode, heard before and after a whole one
+    await feed_at(hass, fake_serial, freezer, nexus_line(NEXUS_BITS[4:], sync=False), 0)
+    await feed_at(hass, fake_serial, freezer, nexus_line(NEXUS_BITS[2:], sync=False), 30)
+    await feed_at(hass, fake_serial, freezer, nexus_line(NEXUS_BITS), 30)
+    await feed_at(hass, fake_serial, freezer, nexus_line(NEXUS_BITS[6:], sync=False), 30)
+    await feed_at(hass, fake_serial, freezer, nexus_line(NEXUS_BITS[3:], sync=False), 30)
+    mock_classify.assert_not_called()
+    response = await hass.services.async_call(
+        DOMAIN, "list_unknown_signals", {}, blocking=True, return_response=True
+    )
+    assert response["signals"] == []
+    assert hass.states.get(sensor).state == "0"
+
+
 async def test_unknown_signal_daily_limit(
     hass: HomeAssistant, fake_serial: FakeSerial, freezer, mock_classify
 ) -> None:

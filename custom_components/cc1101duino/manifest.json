@@ -11,5 +11,5 @@
   "issue_tracker": "https://github.com/FoxDenHome/CC1101Duino/issues",
   "loggers": ["anthropic", "serial_asyncio_fast"],
   "requirements": ["pyserial-asyncio-fast>=0.16", "anthropic>=0.75.0"],
-  "version": "2.5.0"
+  "version": "2.5.1"
 }
