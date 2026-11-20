@@ -60,13 +60,21 @@ class CC1101DuinoFirmwareUpdate(UpdateEntity):
         )
 
     async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
+        installing = True
+
         def progress(percentage: int) -> None:
-            self.hass.loop.call_soon_threadsafe(self._async_set_progress, percentage)
+            self.hass.loop.call_soon_threadsafe(set_progress, percentage)
+
+        def set_progress(percentage: int) -> None:
+            # A report from the flashing thread can arrive after the install finished
+            if installing:
+                self._async_set_progress(percentage)
 
         self._async_set_progress(0)
         try:
             await self._hub.async_install_firmware(self._firmware.image, progress)
         finally:
+            installing = False
             self._attr_in_progress = False
             self._attr_update_percentage = None
             self.async_write_ha_state()
