@@ -201,6 +201,12 @@ async def test_signalduino_sensor(hass: HomeAssistant, fake_serial: FakeSerial) 
     device = dr.async_get(hass).async_get(registry.async_get(entity_ids["temperature"]).device_id)
     assert device.name == "SD_WS_27_TH_2"
     assert device.model == "EFTH-800, EFS-3110A"
+    (hub_device,) = (
+        candidate
+        for candidate in dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+        if (DOMAIN, entry.entry_id) in candidate.identifiers
+    )
+    assert device.via_device_id == hub_device.id
 
 
 async def test_signalduino_message_fires_event(

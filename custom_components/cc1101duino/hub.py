@@ -101,6 +101,8 @@ class CC1101DuinoHub:
         self.hass = hass
         self.entry_id = entry_id
         self.device = device
+        # Device registry id of the hub itself, set once it is registered
+        self.device_id: str | None = None
         self.coder = LineCoder()
         self.connected = False
         self.firmware_version: str | None = None

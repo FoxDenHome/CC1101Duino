@@ -160,11 +160,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: CC1101DuinoConfigEntry) 
     entry.async_on_unload(classifier.async_unload)
     entry.async_on_unload(hub.async_close)
 
-    dr.async_get(hass).async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, entry.entry_id)},
-        manufacturer="CC1101Duino",
-        name=f"CC1101Duino {hub.device}",
+    hub.device_id = (
+        dr.async_get(hass)
+        .async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, entry.entry_id)},
+            manufacturer="CC1101Duino",
+            name=f"CC1101Duino {hub.device}",
+        )
+        .id
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

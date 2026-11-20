@@ -1,5 +1,8 @@
 pytest-homeassistant-custom-component
+# Minimum supported Home Assistant version, see hacs.json
+homeassistant>=2026.8.0
 pyserial-asyncio-fast
 # Imported through homeassistant.components.usb
 aiousbwatcher
+serialx
 anthropic

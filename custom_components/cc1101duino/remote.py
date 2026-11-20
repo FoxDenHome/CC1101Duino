@@ -46,10 +46,10 @@ class RemoteKey(NamedTuple):
         return cls(*parts)
 
 
-def device_info(entry_id: str, key: RemoteKey, signal: Signal | None) -> DeviceInfo:
+def device_info(entry: CC1101DuinoConfigEntry, key: RemoteKey, signal: Signal | None) -> DeviceInfo:
     info = DeviceInfo(
-        identifiers={(DOMAIN, f"{entry_id}-{key.coder}-{key.id}")},
-        via_device=(DOMAIN, entry_id),
+        identifiers={(DOMAIN, f"{entry.entry_id}-{key.coder}-{key.id}")},
+        via_device_id=entry.runtime_data.device_id,
     )
     if signal is None:
         # Restored from the registry, which already knows the name and model
@@ -84,7 +84,7 @@ class RemoteEntity(Entity):
         self._hub = entry.runtime_data
         self.entity_description = description
         self._attr_unique_id = key.unique_id(entry.entry_id)
-        self._attr_device_info = device_info(entry.entry_id, key, signal)
+        self._attr_device_info = device_info(entry, key, signal)
 
     @property
     def available(self) -> bool:
